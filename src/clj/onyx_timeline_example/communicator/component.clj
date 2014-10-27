@@ -43,9 +43,9 @@
   component/Lifecycle
   (start [component] (log/info "Starting Producer Channels Component")
     (assoc component
-           :output (chan)))
+           :producer (chan)))
   (stop [component] (log/info "Stop Producer Channels Component")
-    (assoc component :output nil)))
+    (assoc component :producer nil)))
 
 (defn new-producer-channels []
   (map->Producer-Channels {}))

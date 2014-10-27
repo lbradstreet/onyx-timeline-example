@@ -2,6 +2,7 @@
   (:gen-class)
   (:require [onyx-timeline-example.communicator.component :as comm]
             [onyx-timeline-example.http.component :as http]
+            [onyx-timeline-example.onyx.component :as onyx]
             [onyx-timeline-example.switchboard :as sw]
             [clojure.tools.namespace.repl :refer  (refresh)]
             [environ.core :refer [env]]
@@ -19,10 +20,19 @@
   (component/system-map
     :comm-channels          (comm/new-communicator-channels)
     :producer-channels (comm/new-producer-channels)
+    :onyx          (component/using (onyx/new-onyx-server conf) {:input-chans :producer-channels
+                                                                 ;:output-chans :
+                                                                 })
     :comm          (component/using (comm/new-communicator)     {:channels   :comm-channels})
     :http          (component/using (http/new-http-server conf) {:comm       :comm})
     :switchboard   (component/using (sw/new-switchboard)        {:comm-chans :comm-channels
-                                                                 :producer-chans :producer-channels})))
+                                                                 ;:onyx :onyx
+                                                                 ;:producer-chans :producer-channels
+                                                                 ;:producer-chans :onyx
+                                                                 ;:consumer-chans :onyx
+                                                                 :onyx :onyx
+                                                                 
+                                                                 })))
 (def system nil)
 
 (defn init []
