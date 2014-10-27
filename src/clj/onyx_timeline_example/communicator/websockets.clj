@@ -13,21 +13,22 @@
     (log/info "Connected:" (:remote-addr req) uid)
     uid))
 
-(defn send-loop [channel f]
-  "run loop, call f with message on channel"
-  (go-loop [] (let [msg (<! channel)] 
-                (f msg)) 
-           (recur)))
-
 ; (defn send-loop [channel f]
 ;   "run loop, call f with message on channel"
-;   (go-loop [] (let [msg (<!! channel)] 
+;   (go-loop [] (let [msg (<! channel)] 
 ;                 (f msg)) 
 ;            (recur)))
 
+(defn send-loop [channel f]
+  "run loop, call f with message on channel"
+  (go-loop [] (let [msg (<!! channel)] 
+                (println "Send loop msg: " msg)
+                (f msg)) 
+           (recur)))
+
 (defn send-stream [uids chsk-send!]
   "deliver percolation matches to interested clients"
-  (fn [msg] (let [[t matches subscriptions] msg]
-              (println "Send stream what " @uids)
-              (doseq [uid (:any @uids)]
-                (chsk-send! uid [:tweet/new {:trial "tiear" :msg "what what"}])))))
+  (fn [msg] ;let [[t matches subscriptions] msg]
+    (println "Send stream what " @uids)
+    (doseq [uid (:any @uids)]
+      (chsk-send! uid [:tweet/new msg]))))

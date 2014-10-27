@@ -12,10 +12,7 @@
 (defrecord Switchboard [comm-chans producer-chans onyx]
   component/Lifecycle
   (start [component] (log/info "Starting Switchboard Component")
-    (println "onyx is " onyx)
-    ;(pipe (:output producer-chans) (:timeline comm-chans))
-    (pipe ;(:output producer-chans) 
-          (:output-chan onyx)
+    (pipe (:output-chan onyx)
           (:timeline comm-chans))
     component)
   (stop [component] (log/info "Stop Switchboard Component")))

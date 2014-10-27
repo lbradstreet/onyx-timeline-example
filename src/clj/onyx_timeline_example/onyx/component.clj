@@ -90,19 +90,6 @@
     :onyx/batch-size batch-size
     :onyx/doc "Writes segments to a core.async channel"}])
 
-;;; Input data to pipe into the input channel, plus the
-;;; sentinel to signal the end of input.
-; (def input-segments
-;   [{:sentence "Hey there user"}
-;    {:sentence "It's really nice outside"}
-;    {:sentence "I live in Redmond"}
-;    :done])
-
-;;; Put the data onto the input chan
-; (doseq [segment input-segments]
-;   (>!! input-chan segment))
-; (close! input-chan)
-
 (def id (java.util.UUID/randomUUID))
 
 (def coord-opts
@@ -137,7 +124,7 @@
         [_ _] {:core-async/out-chan output-chan})
 
       (let [conn (onyx.api/connect :memory coord-opts)
-            v-peers (onyx.api/start-peers conn 1 peer-opts)]
+            v-peers (onyx.api/start-peers conn 8 peer-opts)]
         (onyx.api/submit-job conn {:catalog catalog :workflow workflow})
         (assoc component 
                :input-chan input-chan
@@ -149,24 +136,5 @@
     (doseq [v-peer v-peers]
       ((:shutdown-fn v-peer)))
     (onyx.api/shutdown conn)))
-
-;; A little utility to read from the channel until :done
-; (defn take-segments! [ch]
-;   (loop [x []]
-;     (let [segment (<!! ch)]
-;       (let [stack (conj x segment)]
-;         (if-not (= segment :done)
-;           (recur stack)
-;           stack)))))
-
-;(def loud-results (take-segments! loud-output-chan))
-;
-;(def question-results (take-segments! question-output-chan))
-
-;(clojure.pprint/pprint loud-results)
-;
-;(println)
-;
-;(clojure.pprint/pprint question-results)
 
 (defn new-onyx-server [conf] (map->Onyx {:conf conf}))
