@@ -27,16 +27,16 @@
                   :peer {:hornetq/mode :vm
                          :zookeeper/address "127.0.0.1:2185"
                          :onyx/id onyx-id}
-                  :num-peers 8
-                  
-                  }})
+                  :num-peers 8}})
 
 (defn get-system [conf]
   "Create system by wiring individual components so that component/start
   will bring up the individual components in the correct order."
+  ; Fix some of these keyword names.
   (component/system-map
-    :comm-channels          (comm/new-communicator-channels)
     :producer-channels (comm/new-producer-channels)
+    :comm-channels (comm/new-communicator-channels)
+    :producer      (component/using (comm/new-producer) {:producer-chans :producer-channels})
     :onyx          (component/using (onyx/new-onyx-server (:onyx conf)) {:input-chans :producer-channels})
     :comm          (component/using (comm/new-communicator)     {:channels   :comm-channels})
     :http          (component/using (http/new-http-server conf) {:comm       :comm})

@@ -17,17 +17,13 @@
 (defn split-by-spaces [segment]
   (map (fn [word] {:word word}) (split-by-spaces-impl (:sentence segment))))
 
-(defn mixed-case [segment]
-  {:word (mixed-case-impl (:word segment))})
-
 (defn loud [segment]
   {:word (loud-impl (:word segment))})
 
 (def workflow
   {:input
    {:split-by-spaces
-    {:mixed-case
-     {:loud :loud-output}}}})
+    {:loud :output}}})
 
 (def batch-size 1)
 
@@ -46,12 +42,6 @@
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size}
 
-   {:onyx/name :mixed-case
-    :onyx/fn :onyx-timeline-example.onyx.component/mixed-case
-    :onyx/type :transformer
-    :onyx/consumption :concurrent
-    :onyx/batch-size batch-size}
-
    {:onyx/name :loud
     :onyx/fn :onyx-timeline-example.onyx.component/loud
     :onyx/type :transformer
@@ -65,7 +55,6 @@
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size
     :onyx/doc "Writes segments to a core.async channel"}])
-
 
 (def capacity 1000)
 

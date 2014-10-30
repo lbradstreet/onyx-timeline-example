@@ -49,3 +49,22 @@
 
 (defn new-producer-channels []
   (map->Producer-Channels {}))
+
+; FIXME: Move out of here
+(defrecord Producer [producer-chans]
+  component/Lifecycle
+  (start [component] (log/info "Starting Producer Channels Component")
+    (assoc component
+           :producer-future 
+           (future 
+             (loop [] 
+               (async/>!! (:producer producer-chans) {:sentence "seitran eitsran eirsan"})
+               (Thread/sleep 1000)
+               (recur)))))
+  (stop [component] (log/info "Stop Producer Channels Component")
+    (future-cancel (:producer-future component))
+    (assoc component :producer-future nil)))
+
+(defn new-producer []
+  (map->Producer {}))
+
