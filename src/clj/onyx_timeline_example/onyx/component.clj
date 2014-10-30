@@ -75,7 +75,8 @@
     (let [input-chan (:producer input-chans)
           output-chan (chan capacity)
           coord-conf (:coord conf)
-          peer-conf (:peer conf)]
+          peer-conf (:peer conf)
+          num-peers (:num-peers conf)]
       (println "Input chan was " input-chan " output " output-chan)
       ;;; Inject the channels needed by the core.async plugin for each
       ;;; input and output.
@@ -86,7 +87,7 @@
         [_ _] {:core-async/out-chan output-chan})
 
       (let [conn (onyx.api/connect :memory coord-conf)
-            v-peers (onyx.api/start-peers conn 8 peer-conf)]
+            v-peers (onyx.api/start-peers conn num-peers peer-conf)]
         (onyx.api/submit-job conn {:catalog catalog :workflow workflow})
         (assoc component 
                :input-chan input-chan
