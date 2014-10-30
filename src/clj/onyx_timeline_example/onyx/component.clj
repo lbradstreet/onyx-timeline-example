@@ -38,13 +38,13 @@
 
    {:onyx/name :split-by-spaces
     :onyx/fn :onyx-timeline-example.onyx.component/split-by-spaces
-    :onyx/type :transformer
+    :onyx/type :function
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size}
 
    {:onyx/name :loud
     :onyx/fn :onyx-timeline-example.onyx.component/loud
-    :onyx/type :transformer
+    :onyx/type :function
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size}
 
@@ -77,6 +77,7 @@
 
       (let [conn (onyx.api/connect :memory coord-conf)
             v-peers (onyx.api/start-peers conn num-peers peer-conf)]
+        ; FIXME: Move the submit job out of the component
         (onyx.api/submit-job conn {:catalog catalog :workflow workflow})
         (assoc component 
                :input-chan input-chan

@@ -67,4 +67,3 @@
 
 (defn new-producer []
   (map->Producer {}))
-
