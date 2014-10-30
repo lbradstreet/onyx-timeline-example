@@ -10,9 +10,26 @@
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]))
 
+(def onyx-id 
+  (java.util.UUID/randomUUID))
+
 (def conf {:tw-check-interval-sec    10
            :tw-restart-wait          60
-           :port                     8888})
+           :port                     8888
+           :onyx {:coord {:hornetq/mode :vm ;; Run HornetQ inside the VM for convenience
+                          :hornetq/server? true
+                          :hornetq.server/type :vm
+                          :zookeeper/address "127.0.0.1:2185"
+                          :zookeeper/server? true ;; Run ZK inside the VM for convenience
+                          :zookeeper.server/port 2185
+                          :onyx/id onyx-id
+                          :onyx.coordinator/revoke-delay 5000}
+                  :peer {:hornetq/mode :vm
+                         :zookeeper/address "127.0.0.1:2185"
+                         :onyx/id onyx-id}
+                  :num-peers 8
+                  
+                  }})
 
 (defn get-system [conf]
   "Create system by wiring individual components so that component/start
@@ -20,19 +37,11 @@
   (component/system-map
     :comm-channels          (comm/new-communicator-channels)
     :producer-channels (comm/new-producer-channels)
-    :onyx          (component/using (onyx/new-onyx-server conf) {:input-chans :producer-channels
-                                                                 ;:output-chans :
-                                                                 })
+    :onyx          (component/using (onyx/new-onyx-server (:onyx conf)) {:input-chans :producer-channels})
     :comm          (component/using (comm/new-communicator)     {:channels   :comm-channels})
     :http          (component/using (http/new-http-server conf) {:comm       :comm})
     :switchboard   (component/using (sw/new-switchboard)        {:comm-chans :comm-channels
-                                                                 ;:onyx :onyx
-                                                                 ;:producer-chans :producer-channels
-                                                                 ;:producer-chans :onyx
-                                                                 ;:consumer-chans :onyx
-                                                                 :onyx :onyx
-                                                                 
-                                                                 })))
+                                                                 :onyx :onyx})))
 (def system nil)
 
 (defn init []

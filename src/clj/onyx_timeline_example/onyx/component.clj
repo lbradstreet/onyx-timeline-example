@@ -10,16 +10,8 @@
 (defn split-by-spaces-impl [s]
   (clojure.string/split s #"\s+"))
 
-(defn mixed-case-impl [s]
-  (->> (cycle [(memfn toUpperCase) (memfn toLowerCase)])
-       (map #(%2 (str %1)) s)
-       (apply str)))
-
 (defn loud-impl [s]
   (str s "!"))
-
-(defn question-impl [s]
-  (str s "?"))
 
 ;;;;; Destructuring functions ;;;;;
 (defn split-by-spaces [segment]
@@ -31,27 +23,11 @@
 (defn loud [segment]
   {:word (loud-impl (:word segment))})
 
-(defn question [segment]
-  {:word (question-impl (:word segment))})
-
-;;;;; Configuration ;;;;;
-
-;;;            input
-;;;              |
-;;;       split-by-spaces
-;;;              |
-;;;          mixed-case
-;;;            /    \
-;;;         loud     question
-;;;           |         |
-;;;    loud-output    question-output
-
 (def workflow
   {:input
    {:split-by-spaces
     {:mixed-case
      {:loud :loud-output}}}})
-
 
 (def batch-size 1)
 
@@ -82,7 +58,7 @@
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size}
 
-   {:onyx/name :loud-output
+   {:onyx/name :output
     :onyx/ident :core.async/write-to-chan
     :onyx/type :output
     :onyx/medium :core.async
@@ -90,22 +66,6 @@
     :onyx/batch-size batch-size
     :onyx/doc "Writes segments to a core.async channel"}])
 
-(def id (java.util.UUID/randomUUID))
-
-(def coord-opts
-  {:hornetq/mode :vm ;; Run HornetQ inside the VM for convenience
-   :hornetq/server? true
-   :hornetq.server/type :vm
-   :zookeeper/address "127.0.0.1:2185"
-   :zookeeper/server? true ;; Run ZK inside the VM for convenience
-   :zookeeper.server/port 2185
-   :onyx/id id
-   :onyx.coordinator/revoke-delay 5000})
-
-(def peer-opts
-  {:hornetq/mode :vm
-   :zookeeper/address "127.0.0.1:2185"
-   :onyx/id id})
 
 (def capacity 1000)
 
@@ -113,18 +73,20 @@
   component/Lifecycle
   (start [component] (log/info "Starting Onyx Component")
     (let [input-chan (:producer input-chans)
-          output-chan (chan capacity)]
+          output-chan (chan capacity)
+          coord-conf (:coord conf)
+          peer-conf (:peer conf)]
       (println "Input chan was " input-chan " output " output-chan)
       ;;; Inject the channels needed by the core.async plugin for each
       ;;; input and output.
       (defmethod l-ext/inject-lifecycle-resources :input
         [_ _] {:core-async/in-chan input-chan})
 
-      (defmethod l-ext/inject-lifecycle-resources :loud-output
+      (defmethod l-ext/inject-lifecycle-resources :output
         [_ _] {:core-async/out-chan output-chan})
 
-      (let [conn (onyx.api/connect :memory coord-opts)
-            v-peers (onyx.api/start-peers conn 8 peer-opts)]
+      (let [conn (onyx.api/connect :memory coord-conf)
+            v-peers (onyx.api/start-peers conn 8 peer-conf)]
         (onyx.api/submit-job conn {:catalog catalog :workflow workflow})
         (assoc component 
                :input-chan input-chan
