@@ -17,3 +17,5 @@ out/
 repl/
 resources/private/
 resources/public/js/out/
+data
+onyx.log
