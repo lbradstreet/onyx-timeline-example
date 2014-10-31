@@ -17,6 +17,7 @@
 (def conf {:tw-check-interval-sec    10
            :tw-restart-wait          60
            :port                     8888
+           :core-async {:capacity 1000}
            :onyx {:coord {:hornetq/mode :vm ;; Run HornetQ inside the VM for convenience
                           :hornetq/server? true
                           :hornetq.server/type :vm
@@ -35,8 +36,8 @@
   will bring up the individual components in the correct order."
   ;; Fix some of these keyword names.
   (component/system-map
-   :input-stream (onyx/new-channel 1000)
-   :output-stream (onyx/new-channel 1000)
+   :input-stream (onyx/new-channel (:capacity (:core-async conf)))
+   :output-stream (onyx/new-channel (:capacity (:core-async conf)))
 ;;   :comm-channels (comm/new-communicator-channels)
 ;;   :onyx          (component/using (onyx/new-onyx-server (:onyx conf)) [:input-stream :output-stream])
 ;;   :comm          (component/using (comm/new-communicator)     {:channels :comm-channels})
