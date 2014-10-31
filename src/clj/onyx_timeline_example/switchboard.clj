@@ -9,12 +9,15 @@
 ;;;; The individual channel components come together like wiring harnesses in a car. One for the engine,
 ;;;; one for the AC, one for the soundsystem and so on.
 
-(defrecord Switchboard [comm-chans producer-chans onyx]
+(defrecord Switchboard []
   component/Lifecycle
-  (start [component] (log/info "Starting Switchboard Component")
-    (pipe (:output-chan onyx)
-          (:timeline comm-chans))
+  (start [component]
+    (println "Starting Switchboard Component")
+    (pipe (:ch (:output-stream component))
+          (:timeline (:comm-channels component)))
     component)
-  (stop [component] (log/info "Stop Switchboard Component")))
+  (stop [component]
+    (println "Stopping Switchboard Component")
+    component))
 
 (defn new-switchboard [] (map->Switchboard {}))

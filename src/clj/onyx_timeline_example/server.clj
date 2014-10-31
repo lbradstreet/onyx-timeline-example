@@ -1,6 +1,7 @@
 (ns onyx-timeline-example.server
   (:gen-class)
   (:require [onyx-timeline-example.communicator.component :as comm]
+            [onyx-timeline-example.communicator.twitter :as twitter]
             [onyx-timeline-example.http.component :as http]
             [onyx-timeline-example.onyx.component :as onyx]
             [onyx-timeline-example.switchboard :as sw]
@@ -10,12 +11,12 @@
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]))
 
-(def onyx-id 
-  (java.util.UUID/randomUUID))
+(def onyx-id (java.util.UUID/randomUUID))
 
 (def conf {:tw-check-interval-sec    10
            :tw-restart-wait          60
            :port                     8888
+           :core-async {:capacity 1000}
            :onyx {:coord {:hornetq/mode :vm ;; Run HornetQ inside the VM for convenience
                           :hornetq/server? true
                           :hornetq.server/type :vm
@@ -27,21 +28,29 @@
                   :peer {:hornetq/mode :vm
                          :zookeeper/address "127.0.0.1:2185"
                          :onyx/id onyx-id}
-                  :num-peers 8}})
+                  :num-peers 5
+                  :coordinator-type :memory}})
 
 (defn get-system [conf]
   "Create system by wiring individual components so that component/start
   will bring up the individual components in the correct order."
-  ; Fix some of these keyword names.
+  ;; Fix some of these keyword names.
   (component/system-map
-    :producer-channels (comm/new-producer-channels)
-    :comm-channels (comm/new-communicator-channels)
-    :producer      (component/using (comm/new-producer) {:producer-chans :producer-channels})
-    :onyx          (component/using (onyx/new-onyx-server (:onyx conf)) {:input-chans :producer-channels})
-    :comm          (component/using (comm/new-communicator)     {:channels   :comm-channels})
-    :http          (component/using (http/new-http-server conf) {:comm       :comm})
-    :switchboard   (component/using (sw/new-switchboard)        {:comm-chans :comm-channels
-                                                                 :onyx :onyx})))
+   :input-stream (onyx/new-channel conf)
+   :output-stream (onyx/new-channel conf)
+   :twitter (component/using (twitter/new-tweet-stream) [:input-stream])
+   :onyx-connection (component/using (onyx/new-onyx-connection conf)
+                                     [:input-stream :output-stream :twitter])
+   :onyx-peers (component/using (onyx/new-onyx-peers conf)
+                                [:onyx-connection])
+   :onyx-job (component/using (onyx/new-onyx-job conf)
+                              [:onyx-connection :input-stream :output-stream])
+   :comm-channels (comm/new-communicator-channels)
+   :comm (component/using (comm/new-communicator) {:channels :comm-channels})
+   :http (component/using (http/new-http-server conf) [:comm])
+   :switchboard (component/using (sw/new-switchboard)
+                                 [:comm-channels :output-stream])))
+
 (def system nil)
 
 (defn init []

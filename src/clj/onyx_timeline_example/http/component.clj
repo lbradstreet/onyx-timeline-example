@@ -36,22 +36,24 @@
 
 (defrecord Httpserver [conf comm server]
   component/Lifecycle
-  (start [component] (log/info "Starting HTTP Component")
-         (defroutes my-routes  ; created during start so that the correct communicator instance is used
-           (GET  "/"    [] (page))
-           (GET  "/dev" [] (static-html "index-dev.html"))
-           (GET  "/chsk" req ((:ajax-get-or-ws-handshake-fn comm) req))
-           (POST "/chsk" req ((:ajax-post-fn comm) req))
-           (resources "/react" {:root "react"})
-           (route/resources "/") ; Static files, notably public/main.js (our cljs target)
-           (route/not-found "Page not found"))
-         (let [my-ring-handler   (ring.middleware.defaults/wrap-defaults my-routes ring-defaults-config)
-               server (http-kit-server/run-server my-ring-handler {:port (:port conf)})
-               uri (format "http://localhost:%s/" (:local-port (meta server)))]
-           (log/info "Http-kit server is running at" uri)
-           (assoc component :server server)))
-  (stop [component] (log/info "Stopping HTTP Server")
-        (server :timeout 100)
-        (assoc component :server nil)))
+  (start [component]
+    (println "Starting HTTP Server")
+    (defroutes my-routes ; created during start so that the correct communicator instance is used
+      (GET  "/"    [] (page))
+      (GET  "/dev" [] (static-html "index-dev.html"))
+      (GET  "/chsk" req ((:ajax-get-or-ws-handshake-fn comm) req))
+      (POST "/chsk" req ((:ajax-post-fn comm) req))
+      (resources "/react" {:root "react"})
+      (route/resources "/") ; Static files, notably public/main.js (our cljs target)
+      (route/not-found "Page not found"))
+    (let [my-ring-handler   (ring.middleware.defaults/wrap-defaults my-routes ring-defaults-config)
+          server (http-kit-server/run-server my-ring-handler {:port (:port conf)})
+          uri (format "http://localhost:%s/" (:local-port (meta server)))]
+      (log/info "Http-kit server is running at" uri)
+      (assoc component :server server)))
+  (stop [component]
+    (println "Stopping HTTP Server")
+    (server :timeout 100)
+    (assoc component :server nil)))
 
 (defn new-http-server [conf] (map->Httpserver {:conf conf}))

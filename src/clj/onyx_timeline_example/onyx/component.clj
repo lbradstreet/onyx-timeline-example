@@ -1,31 +1,30 @@
 (ns onyx-timeline-example.onyx.component
-  (:require [clojure.core.async :refer [chan >!! <!! close!]]
+  (:require [clojure.core.async :refer [chan >!! <!! close! sliding-buffer]]
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
             [onyx.peer.task-lifecycle-extensions :as l-ext]
             [onyx.plugin.core-async]
             [onyx.api]))
 
-;;;;; Implementation functions ;;;;;
-(defn split-by-spaces-impl [s]
-  (clojure.string/split s #"\s+"))
+(defn extract-tweet [segment]
+  {:tweet (:text segment)})
 
-(defn loud-impl [s]
-  (str s "!"))
-
-;;;;; Destructuring functions ;;;;;
 (defn split-by-spaces [segment]
-  (map (fn [word] {:word word}) (split-by-spaces-impl (:sentence segment))))
+  (map (fn [word] {:word word})
+       (clojure.string/split (:tweet segment) #"\s+")))
 
 (defn loud [segment]
-  {:word (loud-impl (:word segment))})
+  {:word (str (:word segment) "!")})
+
+(def batch-size 50)
+
+(def batch-timeout 300)
 
 (def workflow
-  [[:input :split-by-spaces]
+  [[:input :extract-tweet]
+   [:extract-tweet :split-by-spaces]
    [:split-by-spaces :loud]
    [:loud :output]])
-
-(def batch-size 1)
 
 (def catalog
   [{:onyx/name :input
@@ -34,19 +33,29 @@
     :onyx/medium :core.async
     :onyx/consumption :sequential
     :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout
     :onyx/doc "Reads segments from a core.async channel"}
+
+   {:onyx/name :extract-tweet
+    :onyx/fn :onyx-timeline-example.onyx.component/extract-tweet
+    :onyx/type :function
+    :onyx/consumption :concurrent
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :split-by-spaces
     :onyx/fn :onyx-timeline-example.onyx.component/split-by-spaces
     :onyx/type :function
     :onyx/consumption :concurrent
-    :onyx/batch-size batch-size}
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :loud
     :onyx/fn :onyx-timeline-example.onyx.component/loud
     :onyx/type :function
     :onyx/consumption :concurrent
-    :onyx/batch-size batch-size}
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :output
     :onyx/ident :core.async/write-to-chan
@@ -54,40 +63,74 @@
     :onyx/medium :core.async
     :onyx/consumption :sequential
     :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout
     :onyx/doc "Writes segments to a core.async channel"}])
 
-(def capacity 1000)
-
-(defrecord Onyx [conf input-chans output-chan conn v-peers]
+(defrecord Channel [conf]
   component/Lifecycle
-  (start [component] (log/info "Starting Onyx Component")
-    (let [input-chan (:producer input-chans)
-          output-chan (chan capacity)
-          coord-conf (:coord conf)
-          peer-conf (:peer conf)
-          num-peers (:num-peers conf)]
-      (println "Input chan was " input-chan " output " output-chan)
-      ;;; Inject the channels needed by the core.async plugin for each
-      ;;; input and output.
-      (defmethod l-ext/inject-lifecycle-resources :input
-        [_ _] {:core-async/in-chan input-chan})
+  (start [component]
+    (println "Starting Channel")
+    (let [capacity (:capacity (:core-async conf))]
+      (assoc component :ch (chan (sliding-buffer capacity)))))
+  (stop [component]
+    (println "Stopping Channel")
+    (when (:ch component)
+      (close! (:ch component)))
+    component))
 
-      (defmethod l-ext/inject-lifecycle-resources :output
-        [_ _] {:core-async/out-chan output-chan})
+(defn new-channel [conf] (map->Channel {:conf conf}))
 
-      (let [conn (onyx.api/connect :memory coord-conf)
-            v-peers (onyx.api/start-peers conn num-peers peer-conf)]
-        ; FIXME: Move the submit job out of the component
-        (onyx.api/submit-job conn {:catalog catalog :workflow workflow})
-        (assoc component 
-               :input-chan input-chan
-               :output-chan output-chan
-               :conn conn
-               :v-peers v-peers))))
-  (stop [component] 
-    (log/info "Stop Onyx Component")
-    (doseq [v-peer v-peers]
-      ((:shutdown-fn v-peer)))
-    (onyx.api/shutdown conn)))
+(defrecord OnyxConnection [conf]
+  component/Lifecycle
+  (start [component]
+    (println "Starting Onyx Coordinator")
+    (let [conn (onyx.api/connect
+                (:coordinator-type (:onyx conf))
+                (:coord (:onyx conf)))]
+      (assoc component :conn conn)))
+  (stop [component]
+    (println "Stopping Onyx Coordinator")
+    (let [{:keys [conn]} component]
+      (when conn (onyx.api/shutdown conn))
+      component)))
 
-(defn new-onyx-server [conf] (map->Onyx {:conf conf}))
+(defn new-onyx-connection [conf] (map->OnyxConnection {:conf conf}))
+
+(defrecord OnyxPeers [conf]
+  component/Lifecycle
+  (start [{:keys [onyx-connection] :as component}]
+    (println "Starting Onyx Peers")
+    (let [v-peers (onyx.api/start-peers (:conn onyx-connection)
+                                        (:num-peers (:onyx conf))
+                                        (:peer (:onyx conf)))]
+      (assoc component :v-peers v-peers)))
+  (stop [component]
+    (println "Stopping Onyx Peers")
+    (when-let [v-peers (:v-peers component)]
+      (doseq [{:keys [shutdown-fn]} v-peers]
+        (shutdown-fn)))
+    component))
+
+(defn new-onyx-peers [conf] (map->OnyxPeers {:conf conf}))
+
+(defrecord OnyxJob [conf]
+  component/Lifecycle
+  (start [{:keys [onyx-connection] :as component}]
+    (println "Starting Onyx Job")
+
+    (defmethod l-ext/inject-lifecycle-resources :input
+      [_ _] {:core-async/in-chan (:ch (:input-stream component))})
+
+    (defmethod l-ext/inject-lifecycle-resources :output
+      [_ _] {:core-async/out-chan (:ch (:output-stream component))})
+    
+    (let [job-id (onyx.api/submit-job
+                  (:conn onyx-connection)
+                  {:catalog catalog :workflow workflow})]
+      (assoc component :job-id job-id)))
+  (stop [component]
+    (println "Stopping Onyx Job")
+    (>!! (:ch (:input-stream component)) :done)
+    component))
+
+(defn new-onyx-job [conf] (map->OnyxJob {:conf conf}))
