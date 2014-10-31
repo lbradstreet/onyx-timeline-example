@@ -21,6 +21,12 @@
     (finally
      (.stop client 500))))
 
+; (defn consume-firehose! [client message-queue ch]
+;   (while true
+;     (do
+;       (Thread/sleep 1000)
+;       (>!! ch {:text "hello how are you"}))))
+
 (defrecord TweetStream []
   component/Lifecycle
   (start [component]
