@@ -52,7 +52,7 @@
     :onyx/ident :core.async/write-to-chan
     :onyx/type :output
     :onyx/medium :core.async
-    :onyx/consumption :concurrent
+    :onyx/consumption :sequential
     :onyx/batch-size batch-size
     :onyx/doc "Writes segments to a core.async channel"}])
 
