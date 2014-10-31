@@ -29,21 +29,26 @@
                   :peer {:hornetq/mode :vm
                          :zookeeper/address "127.0.0.1:2185"
                          :onyx/id onyx-id}
-                  :num-peers 8}})
+                  :num-peers 4
+                  :coordinator-type :memory}})
 
 (defn get-system [conf]
   "Create system by wiring individual components so that component/start
   will bring up the individual components in the correct order."
   ;; Fix some of these keyword names.
   (component/system-map
-   :input-stream (onyx/new-channel (:capacity (:core-async conf)))
-   :output-stream (onyx/new-channel (:capacity (:core-async conf)))
-;;   :comm-channels (comm/new-communicator-channels)
-;;   :onyx          (component/using (onyx/new-onyx-server (:onyx conf)) [:input-stream :output-stream])
-;;   :comm          (component/using (comm/new-communicator)     {:channels :comm-channels})
-;;   :http          (component/using (http/new-http-server conf) [:comm])
-   :twitter       (component/using (twitter/new-tweet-stream) [:input-stream])
-;;   :switchboard   (component/using (sw/new-switchboard)        [:comm-channels :onyx])
+   :input-stream (onyx/new-channel conf)
+   :output-stream (onyx/new-channel conf)
+   :twitter (component/using (twitter/new-tweet-stream) [:input-stream])
+   :onyx-connection (component/using (onyx/new-onyx-connection conf)
+                                     [:input-stream :output-stream :twitter])
+   :onyx-peers (component/using (onyx/new-onyx-peers conf)
+                                [:onyx-connection])
+
+   ;;   :comm-channels (comm/new-communicator-channels)
+   ;;   :comm          (component/using (comm/new-communicator)     {:channels :comm-channels})
+   ;;   :http          (component/using (http/new-http-server conf) [:comm])
+   ;;   :switchboard   (component/using (sw/new-switchboard)        [:comm-channels :onyx])
    ))
 
 (def system nil)

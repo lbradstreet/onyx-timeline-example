@@ -25,6 +25,7 @@
 (defrecord TweetStream []
   component/Lifecycle
   (start [component]
+    (println "Starting Tweet Stream")
     (let [ch (:ch (:input-stream component))
           consumer-key (env :twitter-consumer-key)
           consumer-secret (env :twitter-consumer-secret)
@@ -43,6 +44,7 @@
           client (.build builder)]
       (assoc component :firehose-fut (future (consume-firehose! client message-queue ch)))))
   (stop [component]
+    (println "Stopping Tweet Stream")
     (future-cancel (:firehose-fut component))
     component))
 

@@ -56,34 +56,50 @@
     :onyx/batch-size batch-size
     :onyx/doc "Writes segments to a core.async channel"}])
 
-(defrecord Channel [capacity]
+(defrecord Channel [conf]
   component/Lifecycle
   (start [component]
-    (assoc component :ch (chan (sliding-buffer capacity))))
+    (println "Starting Channel")
+    (let [capacity (:capacity (:core-async conf))]
+      (assoc component :ch (chan (sliding-buffer capacity)))))
   (stop [component]
-    (close! (:ch component))
+    (println "Stopping Channel")
+    (when (:ch component)
+      (close! (:ch component)))
     component))
 
-(defn new-channel [capacity] (map->Channel {:capacity capacity}))
+(defn new-channel [conf] (map->Channel {:conf conf}))
 
-(defrecord Onyx [conf input-chans output-chan conn v-peers]
+(defrecord OnyxConnection [conf]
   component/Lifecycle
-  (start [component] (log/info "Starting Onyx Component")
-    (let [coord-conf (:coord conf)
-          peer-conf (:peer conf)
-          num-peers (:num-peers conf)]
+  (start [component]
+    (println "Starting Onyx Coordinator")
+    (println )
+    (let [conn (onyx.api/connect
+                (:coordinator-type (:onyx conf))
+                (:coord (:onyx conf)))]
+      (assoc component :conn conn)))
+  (stop [component]
+    (println "Stopping Onyx Coordinator")
+    (let [{:keys [conn]} component]
+      (when conn (onyx.api/shutdown conn))
+      component)))
 
-      (let [conn (onyx.api/connect :memory coord-conf)
-            v-peers (onyx.api/start-peers conn num-peers peer-conf)]
-        ; FIXME: Move the submit job out of the component
-        (onyx.api/submit-job conn {:catalog catalog :workflow workflow})
-        (assoc component 
-               :conn conn
-               :v-peers v-peers))))
-  (stop [component] 
-    (log/info "Stop Onyx Component")
-    (doseq [v-peer v-peers]
-      ((:shutdown-fn v-peer)))
-    (onyx.api/shutdown conn)))
+(defn new-onyx-connection [conf] (map->OnyxConnection {:conf conf}))
 
-(defn new-onyx-server [conf] (map->Onyx {:conf conf}))
+(defrecord OnyxPeers [conf]
+  component/Lifecycle
+  (start [{:keys [onyx-connection] :as component}]
+    (println "Starting Onyx Peers")
+    (let [v-peers (onyx.api/start-peers (:conn onyx-connection)
+                                        (:num-peers (:onyx conf))
+                                        (:peer (:onyx conf)))]
+      (assoc component :v-peers v-peers)))
+  (stop [component]
+    (println "Stopping Onyx Peers")
+    (when-let [v-peers (:v-peers component)]
+      (doseq [{:keys [shutdown-fn]} v-peers]
+        (shutdown-fn)))
+    component))
+
+(defn new-onyx-peers [conf] (map->OnyxPeers {:conf conf}))
