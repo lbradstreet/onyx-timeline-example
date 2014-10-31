@@ -1,5 +1,5 @@
 (ns onyx-timeline-example.onyx.component
-  (:require [clojure.core.async :refer [chan >!! <!! close!]]
+  (:require [clojure.core.async :refer [chan >!! <!! close! sliding-buffer]]
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
             [onyx.peer.task-lifecycle-extensions :as l-ext]
@@ -56,32 +56,28 @@
     :onyx/batch-size batch-size
     :onyx/doc "Writes segments to a core.async channel"}])
 
-(def capacity 1000)
+(defrecord Channel [capacity]
+  component/Lifecycle
+  (start [component]
+    (assoc component :ch (chan (sliding-buffer capacity))))
+  (stop [component]
+    (close! (:ch component))
+    component))
+
+(defn new-channel [capacity] (map->Channel {:capacity capacity}))
 
 (defrecord Onyx [conf input-chans output-chan conn v-peers]
   component/Lifecycle
   (start [component] (log/info "Starting Onyx Component")
-    (let [input-chan (:producer input-chans)
-          output-chan (chan capacity)
-          coord-conf (:coord conf)
+    (let [coord-conf (:coord conf)
           peer-conf (:peer conf)
           num-peers (:num-peers conf)]
-      (println "Input chan was " input-chan " output " output-chan)
-      ;;; Inject the channels needed by the core.async plugin for each
-      ;;; input and output.
-      (defmethod l-ext/inject-lifecycle-resources :input
-        [_ _] {:core-async/in-chan input-chan})
-
-      (defmethod l-ext/inject-lifecycle-resources :output
-        [_ _] {:core-async/out-chan output-chan})
 
       (let [conn (onyx.api/connect :memory coord-conf)
             v-peers (onyx.api/start-peers conn num-peers peer-conf)]
         ; FIXME: Move the submit job out of the component
         (onyx.api/submit-job conn {:catalog catalog :workflow workflow})
         (assoc component 
-               :input-chan input-chan
-               :output-chan output-chan
                :conn conn
                :v-peers v-peers))))
   (stop [component] 

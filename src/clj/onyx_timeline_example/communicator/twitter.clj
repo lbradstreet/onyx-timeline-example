@@ -11,12 +11,13 @@
            [com.twitter.hbc.httpclient.auth OAuth1]
            [com.twitter.hbc.core.processor StringDelimitedProcessor]))
 
-(defn consume-firehose! [ch]
+(defn consume-firehose! [client message-queue ch]
   (.connect client)
   (try
     (while true
       (let [tweet (parse-string (.take message-queue) true)]
         (when (:id_str tweet)
+          (println (:text tweet))
           (>!! ch tweet))))
     (finally
      (.stop client 500))))
@@ -40,8 +41,9 @@
                     (.endpoint endpoint)
                     (.processor (StringDelimitedProcessor. message-queue)))
           client (.build builder)]
-      (assoc component :firehose-fut (future (consume-firehose! ch)))))
+      (assoc component :firehose-fut (future (consume-firehose! client message-queue ch)))))
   (stop [component]
     (future-cancel (:firehose-fut component))
     component))
 
+(defn new-tweet-stream [] (map->TweetStream {}))

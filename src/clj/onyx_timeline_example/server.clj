@@ -1,6 +1,7 @@
 (ns onyx-timeline-example.server
   (:gen-class)
   (:require [onyx-timeline-example.communicator.component :as comm]
+            [onyx-timeline-example.communicator.twitter :as twitter]
             [onyx-timeline-example.http.component :as http]
             [onyx-timeline-example.onyx.component :as onyx]
             [onyx-timeline-example.switchboard :as sw]
@@ -32,16 +33,18 @@
 (defn get-system [conf]
   "Create system by wiring individual components so that component/start
   will bring up the individual components in the correct order."
-  ; Fix some of these keyword names.
+  ;; Fix some of these keyword names.
   (component/system-map
-    :producer-channels (comm/new-producer-channels)
-    :comm-channels (comm/new-communicator-channels)
-    :producer      (component/using (comm/new-producer) {:producer-chans :producer-channels})
-    :onyx          (component/using (onyx/new-onyx-server (:onyx conf)) {:input-chans :producer-channels})
-    :comm          (component/using (comm/new-communicator)     {:channels   :comm-channels})
-    :http          (component/using (http/new-http-server conf) {:comm       :comm})
-    :switchboard   (component/using (sw/new-switchboard)        {:comm-chans :comm-channels
-                                                                 :onyx :onyx})))
+   :input-stream (onyx/new-channel 1000)
+   :output-stream (onyx/new-channel 1000)
+;;   :comm-channels (comm/new-communicator-channels)
+;;   :onyx          (component/using (onyx/new-onyx-server (:onyx conf)) [:input-stream :output-stream])
+;;   :comm          (component/using (comm/new-communicator)     {:channels :comm-channels})
+;;   :http          (component/using (http/new-http-server conf) [:comm])
+   :twitter       (component/using (twitter/new-tweet-stream) [:input-stream])
+;;   :switchboard   (component/using (sw/new-switchboard)        [:comm-channels :onyx])
+   ))
+
 (def system nil)
 
 (defn init []
