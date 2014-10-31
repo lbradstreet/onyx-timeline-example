@@ -15,9 +15,14 @@
                  [com.cognitect/transit-clj "0.8.259"]
                  [com.cognitect/transit-cljs "0.8.188"]
                  [com.stuartsierra/component "0.2.2"]
+                 [com.twitter/hbc-core "2.0.0"
+                  :exclusions [commons-codec
+                               com.google.guava/guava
+                               org.apache.httpcomponents/httpclient]]
                  [com.mdrogalis/onyx "0.4.0"]
                  [com.mdrogalis/onyx-core-async "0.4.0"]
                  [com.taoensso/sente "1.2.0"]
+                 [cheshire "5.3.1"]
                  [ring "1.3.1"]
                  [compojure "1.2.0"]
                  [enlive "1.1.5"]
