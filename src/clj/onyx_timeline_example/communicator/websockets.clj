@@ -22,13 +22,11 @@
 (defn send-loop [channel f]
   "run loop, call f with message on channel"
   (go-loop [] (let [msg (<!! channel)] 
-                (println "Send loop msg: " msg)
                 (f msg)) 
            (recur)))
 
 (defn send-stream [uids chsk-send!]
   "deliver percolation matches to interested clients"
-  (fn [msg] ;let [[t matches subscriptions] msg]
-    (println "Send stream what " @uids)
+  (fn [msg]
     (doseq [uid (:any @uids)]
       (chsk-send! uid [:tweet/new msg]))))

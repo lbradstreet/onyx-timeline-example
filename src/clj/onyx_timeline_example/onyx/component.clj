@@ -16,9 +16,9 @@
 (defn loud [segment]
   {:word (str (:word segment) "!")})
 
-(def batch-size 25)
+(def batch-size 50)
 
-(def batch-timeout 3000)
+(def batch-timeout 300)
 
 (def workflow
   [[:input :extract-tweet]

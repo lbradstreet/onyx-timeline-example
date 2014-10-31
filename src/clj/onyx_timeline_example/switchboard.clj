@@ -13,7 +13,8 @@
   component/Lifecycle
   (start [component]
     (println "Starting Switchboard Component")
-    (pipe (:ch (:output-stream component)) (:timeline (:comm-chans component)))
+    (pipe (:ch (:output-stream component))
+          (:timeline (:comm-channels component)))
     component)
   (stop [component]
     (println "Stopping Switchboard Component")
