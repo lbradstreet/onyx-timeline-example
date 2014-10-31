@@ -21,9 +21,9 @@
   {:word (loud-impl (:word segment))})
 
 (def workflow
-  {:input
-   {:split-by-spaces
-    {:loud :output}}})
+  [[:input :split-by-spaces]
+   [:split-by-spaces :loud]
+   [:loud :output]])
 
 (def batch-size 1)
 
@@ -32,7 +32,7 @@
     :onyx/ident :core.async/read-from-chan
     :onyx/type :input
     :onyx/medium :core.async
-    :onyx/consumption :concurrent
+    :onyx/consumption :sequential
     :onyx/batch-size batch-size
     :onyx/doc "Reads segments from a core.async channel"}
 
