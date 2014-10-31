@@ -44,12 +44,10 @@
                                      [:input-stream :output-stream :twitter])
    :onyx-peers (component/using (onyx/new-onyx-peers conf)
                                 [:onyx-connection])
-
-   ;;   :comm-channels (comm/new-communicator-channels)
-   ;;   :comm          (component/using (comm/new-communicator)     {:channels :comm-channels})
-   ;;   :http          (component/using (http/new-http-server conf) [:comm])
-   ;;   :switchboard   (component/using (sw/new-switchboard)        [:comm-channels :onyx])
-   ))
+   :comm-channels (comm/new-communicator-channels)
+   :comm (component/using (comm/new-communicator) {:channels :comm-channels})
+   :http (component/using (http/new-http-server conf) [:comm])
+   :switchboard (component/using (sw/new-switchboard) [:comm-channels :output-stream])))
 
 (def system nil)
 

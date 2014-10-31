@@ -74,7 +74,6 @@
   component/Lifecycle
   (start [component]
     (println "Starting Onyx Coordinator")
-    (println )
     (let [conn (onyx.api/connect
                 (:coordinator-type (:onyx conf))
                 (:coord (:onyx conf)))]
