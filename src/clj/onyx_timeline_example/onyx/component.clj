@@ -20,7 +20,9 @@
 (defn loud [segment]
   {:word (loud-impl (:word segment))})
 
-(def batch-size 1)
+(def batch-size 25)
+
+(def batch-timeout 3000)
 
 (def workflow
   [[:input :split-by-spaces]
@@ -34,19 +36,22 @@
     :onyx/medium :core.async
     :onyx/consumption :sequential
     :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout
     :onyx/doc "Reads segments from a core.async channel"}
 
    {:onyx/name :split-by-spaces
     :onyx/fn :onyx-timeline-example.onyx.component/split-by-spaces
     :onyx/type :function
     :onyx/consumption :concurrent
-    :onyx/batch-size batch-size}
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :loud
     :onyx/fn :onyx-timeline-example.onyx.component/loud
     :onyx/type :function
     :onyx/consumption :concurrent
-    :onyx/batch-size batch-size}
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :output
     :onyx/ident :core.async/write-to-chan
@@ -54,6 +59,7 @@
     :onyx/medium :core.async
     :onyx/consumption :sequential
     :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout
     :onyx/doc "Writes segments to a core.async channel"}])
 
 (defrecord Channel [conf]
@@ -107,6 +113,13 @@
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
     (println "Starting Onyx Job")
+
+    (defmethod l-ext/inject-lifecycle-resources :input
+      [_ _] {:core-async/in-chan (:ch (:input-stream component))})
+
+    (defmethod l-ext/inject-lifecycle-resources :output
+      [_ _] {:core-async/out-chan (:ch (:output-stream component))})
+    
     (let [job-id (onyx.api/submit-job
                   (:conn onyx-connection)
                   {:catalog catalog :workflow workflow})]

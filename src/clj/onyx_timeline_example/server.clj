@@ -44,7 +44,7 @@
    :onyx-peers (component/using (onyx/new-onyx-peers conf)
                                 [:onyx-connection])
    :onyx-job (component/using (onyx/new-onyx-job conf)
-                              [:onyx-connection :input-stream])
+                              [:onyx-connection :input-stream :output-stream])
    :comm-channels (comm/new-communicator-channels)
    :comm (component/using (comm/new-communicator) {:channels :comm-channels})
    :http (component/using (http/new-http-server conf) [:comm])
