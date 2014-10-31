@@ -34,6 +34,7 @@
                  [weasel "0.4.2"]
                  [leiningen "2.5.0"]
                  [http-kit "2.1.19"]
+                 [racehub/om-bootstrap  "0.3.1"]
                  [prismatic/om-tools "0.3.3"]]
 
   :plugins [[lein-cljsbuild "1.0.3"]

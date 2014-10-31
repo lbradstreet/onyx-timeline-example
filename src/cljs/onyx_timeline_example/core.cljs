@@ -2,7 +2,8 @@
   (:require-macros [cljs.core.match.macros :refer (match)]
                    [cljs.core.async.macros :refer [go-loop go alt!]])
   (:require [om.core :as om :include-macros true]
-            [om-tools.dom :as dom :include-macros true]
+            [om-bootstrap.panel :as p]
+            [om-tools.dom :as d :include-macros true]
             [om-tools.core :refer-macros [defcomponent]]
             [taoensso.sente  :as sente  :refer (cb-success?)]
             [taoensso.sente.packers.transit :as sente-transit]
@@ -54,12 +55,15 @@
                               (om/transact! data #(add-item % msg)))))
                        (recur)))
   (render-state [_ _]
-                (dom/div
-                  (dom/ul {:class "timeline-list"}
-                          (for [item (:items data)]
-                            (dom/li {:key (:id item)
-                                     :style {:color "blue"}}
-                                    (:text item)))))))
+                (p/panel
+                  {:header "Results panel"
+                   :list-group (d/ul {:class "list-group"}
+                                     (for [item (:items data)]
+                                       (d/li {:key (:id item)
+                                              :class "list-group-item"
+                                              :style {:color "blue"}}
+                                             (:text item))))}
+                  nil)))
 
 (defn main []
   (om/root timeline 
