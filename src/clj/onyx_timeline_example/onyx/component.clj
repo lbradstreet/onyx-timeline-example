@@ -20,12 +20,12 @@
 (defn loud [segment]
   {:word (loud-impl (:word segment))})
 
+(def batch-size 1)
+
 (def workflow
   [[:input :split-by-spaces]
    [:split-by-spaces :loud]
    [:loud :output]])
-
-(def batch-size 1)
 
 (def catalog
   [{:onyx/name :input
@@ -102,3 +102,18 @@
     component))
 
 (defn new-onyx-peers [conf] (map->OnyxPeers {:conf conf}))
+
+(defrecord OnyxJob [conf]
+  component/Lifecycle
+  (start [{:keys [onyx-connection] :as component}]
+    (println "Starting Onyx Job")
+    (let [job-id (onyx.api/submit-job
+                  (:conn onyx-connection)
+                  {:catalog catalog :workflow workflow})]
+      (assoc component :job-id job-id)))
+  (stop [component]
+    (println "Stopping Onyx Job")
+    (>!! (:ch (:input-stream component)) :done)
+    component))
+
+(defn new-onyx-job [conf] (map->OnyxJob {:conf conf}))

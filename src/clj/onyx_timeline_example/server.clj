@@ -11,8 +11,7 @@
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]))
 
-(def onyx-id 
-  (java.util.UUID/randomUUID))
+(def onyx-id (java.util.UUID/randomUUID))
 
 (def conf {:tw-check-interval-sec    10
            :tw-restart-wait          60
@@ -44,10 +43,13 @@
                                      [:input-stream :output-stream :twitter])
    :onyx-peers (component/using (onyx/new-onyx-peers conf)
                                 [:onyx-connection])
+   :onyx-job (component/using (onyx/new-onyx-job conf)
+                              [:onyx-connection :input-stream])
    :comm-channels (comm/new-communicator-channels)
    :comm (component/using (comm/new-communicator) {:channels :comm-channels})
    :http (component/using (http/new-http-server conf) [:comm])
-   :switchboard (component/using (sw/new-switchboard) [:comm-channels :output-stream])))
+   :switchboard (component/using (sw/new-switchboard)
+                                 [:comm-channels :output-stream])))
 
 (def system nil)
 
