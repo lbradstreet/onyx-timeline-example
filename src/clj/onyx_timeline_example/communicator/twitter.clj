@@ -17,7 +17,7 @@
     (while true
       (let [tweet (parse-string (.take message-queue) true)]
         (when (:id_str tweet)
-          (>!! ch {:sentence (:text tweet)}))))
+          (>!! ch tweet))))
     (finally
      (.stop client 500))))
 

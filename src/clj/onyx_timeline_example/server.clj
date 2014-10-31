@@ -28,7 +28,7 @@
                   :peer {:hornetq/mode :vm
                          :zookeeper/address "127.0.0.1:2185"
                          :onyx/id onyx-id}
-                  :num-peers 4
+                  :num-peers 5
                   :coordinator-type :memory}})
 
 (defn get-system [conf]

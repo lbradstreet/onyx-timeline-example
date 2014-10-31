@@ -6,26 +6,23 @@
             [onyx.plugin.core-async]
             [onyx.api]))
 
-;;;;; Implementation functions ;;;;;
-(defn split-by-spaces-impl [s]
-  (clojure.string/split s #"\s+"))
+(defn extract-tweet [segment]
+  {:tweet (:text segment)})
 
-(defn loud-impl [s]
-  (str s "!"))
-
-;;;;; Destructuring functions ;;;;;
 (defn split-by-spaces [segment]
-  (map (fn [word] {:word word}) (split-by-spaces-impl (:sentence segment))))
+  (map (fn [word] {:word word})
+       (clojure.string/split (:tweet segment) #"\s+")))
 
 (defn loud [segment]
-  {:word (loud-impl (:word segment))})
+  {:word (str (:word segment) "!")})
 
 (def batch-size 25)
 
 (def batch-timeout 3000)
 
 (def workflow
-  [[:input :split-by-spaces]
+  [[:input :extract-tweet]
+   [:extract-tweet :split-by-spaces]
    [:split-by-spaces :loud]
    [:loud :output]])
 
@@ -38,6 +35,13 @@
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout
     :onyx/doc "Reads segments from a core.async channel"}
+
+   {:onyx/name :extract-tweet
+    :onyx/fn :onyx-timeline-example.onyx.component/extract-tweet
+    :onyx/type :function
+    :onyx/consumption :concurrent
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :split-by-spaces
     :onyx/fn :onyx-timeline-example.onyx.component/split-by-spaces
