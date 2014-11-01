@@ -28,7 +28,7 @@
                   :peer {:hornetq/mode :vm
                          :zookeeper/address "127.0.0.1:2185"
                          :onyx/id onyx-id}
-                  :num-peers 5
+                  :num-peers 9
                   :coordinator-type :memory}})
 
 (defn get-system [conf]
@@ -77,3 +77,4 @@
 (defn -main [& args]
   ;(log/info "Application started, PID" (pid/current))
   (alter-var-root #'system component/start))
+

@@ -21,6 +21,7 @@
                                org.apache.httpcomponents/httpclient]]
                  [com.mdrogalis/onyx "0.4.0"]
                  [com.mdrogalis/onyx-core-async "0.4.0"]
+                 [com.mdrogalis/lib-onyx "0.4.0"]
                  [com.taoensso/sente "1.2.0"]
                  [cheshire "5.3.1"]
                  [ring "1.3.1"]

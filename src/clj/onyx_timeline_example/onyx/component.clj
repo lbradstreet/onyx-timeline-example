@@ -4,27 +4,74 @@
             [com.stuartsierra.component :as component]
             [onyx.peer.task-lifecycle-extensions :as l-ext]
             [onyx.plugin.core-async]
-            [onyx.api]))
+            [onyx.api]
+            [lib-onyx.interval]))
+
+(defn into-words [s]
+  (clojure.string/split s #"\s"))
 
 (defn extract-tweet [segment]
   {:tweet (:text segment)})
 
-(defn split-by-spaces [segment]
-  (map (fn [word] {:word word})
-       (clojure.string/split (:tweet segment) #"\s+")))
+(defn filter-by-regex [regex {:keys [tweet] :as segment}]
+  (if (re-find regex tweet) segment []))
 
-(defn loud [segment]
-  {:word (str (:word segment) "!")})
+(defn extract-links [{:keys [tweet]}]
+  (->> (into-words tweet)
+       (map (partial re-matches #"http(s)?:\/\/.*"))
+       (map first)
+       (filter identity)
+       (map (fn [link] {:link link}))))
+
+(defn extract-hashtags [{:keys [tweet]}]
+  (->> (into-words tweet)
+       (map (partial re-matches #"#.*"))
+       (filter identity)
+       (map (fn [hashtag] {:hashtag hashtag}))))
+
+(defn split-into-words [{:keys [tweet]}]
+  (map (fn [word] {:word word}) (into-words tweet)))
+
+(defn word-count [local-state {:keys [word] :as segment}]
+  (swap! local-state (fn [state] (assoc state word (inc (get state word 0)))))
+  [])
+
+(defn log-and-purge [event]
+  (clojure.pprint/pprint
+   (swap! (:timeline/state event)
+          (fn [state]
+            (->> state
+                 (into [])
+                 (sort-by second)
+                 (reverse)
+                 (take 15)
+                 (into {}))))))
 
 (def batch-size 50)
 
 (def batch-timeout 300)
 
+;;                                input
+;;                                  |
+;;                            extract-tweet
+;;                                  |
+;;                           filter-by-regex
+;;                 /       /        |              \                 \
+;; extract-hashtags extract-links split-into-words emotional-analysis tweet-output
+;;        /               /         |               \
+;;  hashtag-count links-output    word-count    emotion-output
+;;      /                           |
+;; top-hashtag-out            top-words-output
+
 (def workflow
   [[:input :extract-tweet]
-   [:extract-tweet :split-by-spaces]
-   [:split-by-spaces :loud]
-   [:loud :output]])
+   [:extract-tweet :filter-by-regex]
+   [:filter-by-regex :extract-links]
+   [:filter-by-regex :extract-hashtags]
+   [:filter-by-regex :split-into-words]
+   [:split-into-words :word-count]
+;   [:extract-hashtags :hashtag-count]
+   [:filter-by-regex :output]])
 
 (def catalog
   [{:onyx/name :input
@@ -43,19 +90,54 @@
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
-   {:onyx/name :split-by-spaces
-    :onyx/fn :onyx-timeline-example.onyx.component/split-by-spaces
+   {:onyx/name :filter-by-regex
+    :onyx/fn :onyx-timeline-example.onyx.component/filter-by-regex
+    :onyx/type :function
+    :onyx/consumption :concurrent
+    :timeline/regex #"(?i).*Halloween.*"
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
+
+   {:onyx/name :extract-links
+    :onyx/fn :onyx-timeline-example.onyx.component/extract-links
     :onyx/type :function
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
-   {:onyx/name :loud
-    :onyx/fn :onyx-timeline-example.onyx.component/loud
+   {:onyx/name :extract-hashtags
+    :onyx/fn :onyx-timeline-example.onyx.component/extract-hashtags
     :onyx/type :function
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
+
+   {:onyx/name :split-into-words
+    :onyx/fn :onyx-timeline-example.onyx.component/split-into-words
+    :onyx/type :function
+    :onyx/consumption :concurrent
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
+
+   {:onyx/name :word-count
+    :onyx/ident :lib-onyx.interval/recurring-action
+    :onyx/fn :onyx-timeline-example.onyx.component/word-count
+    :onyx/type :function
+    :onyx/group-by-key :word
+    :onyx/consumption :concurrent
+    :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge
+    :lib-onyx.interval/ms 15000
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
+
+   {:onyx/name :hashtag-count
+    :onyx/fn :onyx-timeline-example.onyx.component/word-count
+    :onyx/type :function
+    :onyx/group-by-key :word
+    :onyx/consumption :concurrent
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout
+    :onyx/doc "Reuses existing word-count function. Hashtags are words, too"}
 
    {:onyx/name :output
     :onyx/ident :core.async/write-to-chan
@@ -65,6 +147,22 @@
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout
     :onyx/doc "Writes segments to a core.async channel"}])
+
+(defmethod l-ext/inject-lifecycle-resources :filter-by-regex
+  [_ {:keys [onyx.core/task-map]}]
+  {:onyx.core/params [(:timeline/regex task-map)]})
+
+(defmethod l-ext/inject-lifecycle-resources :word-count
+  [_ {:keys [onyx.core/queue] :as event}]
+  (let [local-state (atom {})]
+    {:onyx.core/params [local-state]
+     :timeline/state local-state}))
+
+(defmethod l-ext/inject-lifecycle-resources :hashtag-count
+  [_ {:keys [onyx.core/queue] :as event}]
+  (let [local-state (atom {})]
+    {:onyx.core/params [local-state]
+     :timeline/state local-state}))
 
 (defrecord Channel [conf]
   component/Lifecycle
@@ -123,7 +221,7 @@
 
     (defmethod l-ext/inject-lifecycle-resources :output
       [_ _] {:core-async/out-chan (:ch (:output-stream component))})
-    
+
     (let [job-id (onyx.api/submit-job
                   (:conn onyx-connection)
                   {:catalog catalog :workflow workflow})]
