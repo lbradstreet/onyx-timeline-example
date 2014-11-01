@@ -25,8 +25,14 @@
                 (f msg)) 
            (recur)))
 
+(defn segment->msg [segment]
+  (cond (contains? segment :tweet)
+        [:tweet/new (:tweet segment)]       
+        (contains? segment :top-words)
+        [:agg/top-word-count (:top-words segment)]))
+
 (defn send-stream [uids chsk-send!]
   "deliver percolation matches to interested clients"
-  (fn [msg]
+  (fn [segment]
     (doseq [uid (:any @uids)]
-      (chsk-send! uid [:tweet/new msg]))))
+      (chsk-send! uid (segment->msg segment)))))
