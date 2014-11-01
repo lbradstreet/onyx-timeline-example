@@ -54,7 +54,8 @@
 
 (defn log-and-purge-hashtags [event]
   (let [result (swap! (:timeline/hashtag-count-state event) top-words)]
-    (>!! (:timeline/output-ch event) {:top-hashtags result})))
+;;    (>!! (:timeline/output-ch event) {:top-hashtags result})
+    ))
 
 (def batch-size 50)
 

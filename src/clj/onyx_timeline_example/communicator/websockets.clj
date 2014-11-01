@@ -35,4 +35,5 @@
   "deliver percolation matches to interested clients"
   (fn [segment]
     (doseq [uid (:any @uids)]
-      (chsk-send! uid (segment->msg segment)))))
+      (when-let [msg (segment->msg segment)]
+        (chsk-send! uid msg)))))
