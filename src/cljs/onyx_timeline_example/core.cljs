@@ -52,11 +52,13 @@
 
 
 (defcomponent top-word-counts [data owner]
+  (init-state  [_]
+              {:receive-chan (:agg-chan (om/get-shared owner :comms))})
   (will-mount [_]
               (go-loop [] 
                        ; Use alt for now, may have some other channels here in the future
                        (alt!
-                         agg-chan
+                         (om/get-state owner :receive-chan)
                          ([msg]
                           (do (println (str "Received event on timeline channel: " msg))
                               (om/update! data msg))))
@@ -78,11 +80,13 @@
                   nil)))
 
 (defcomponent timeline [data owner]
+  (init-state  [_]
+              {:receive-chan (:timeline (om/get-shared owner :comms))})
   (will-mount [_]
               (go-loop [] 
                        ; Use alt for now, may have some other channels here in the future
                        (alt!
-                         timeline-chan
+                         (om/get-state owner :receive-chan)
                          ([msg]
                           (do (println (str "Received event on timeline channel: " msg))
                               (om/transact! data #(add-tweet % msg)))))
@@ -112,4 +116,6 @@
 (defn main []
   (om/root app 
            app-state 
-           {:target (. js/document (getElementById "app"))}))
+           {:target (. js/document (getElementById "app"))
+            :shared {:comms {:timeline timeline-chan
+                             :agg-chan agg-chan}}}))
