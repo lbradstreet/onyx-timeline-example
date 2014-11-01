@@ -34,20 +34,27 @@
 
 (defn word-count [local-state {:keys [word] :as segment}]
   (swap! local-state (fn [state] (assoc state word (inc (get state word 0)))))
-  ;[]
-  )
+  [])
+
+(defn hashtag-count [local-state {:keys [hashtag] :as segment}]
+  (swap! local-state (fn [state] (assoc state hashtag (inc (get state hashtag 0)))))
+  [])
 
 (defn top-words [m]
-  {:top-words (->> m
-                   (into [])
-                   (sort-by second)
-                   (reverse)
-                   (take 15)
-                   (into {}))})
+  (->> m
+       (into [])
+       (sort-by second)
+       (reverse)
+       (take 15)
+       (into {})))
 
-(defn log-and-purge [event]
-  (clojure.pprint/pprint 
-    (swap! (:timeline/state event) top-words)))
+(defn log-and-purge-words [event]
+  (let [result (swap! (:timeline/word-count-state event) top-words)]
+    (>!! (:timeline/output-ch event) {:top-words result})))
+
+(defn log-and-purge-hashtags [event]
+  (let [result (swap! (:timeline/hashtag-count-state event) top-words)]
+    (>!! (:timeline/output-ch event) {:top-hashtags result})))
 
 (def batch-size 50)
 
@@ -58,10 +65,10 @@
 ;;                            extract-tweet
 ;;                                  |
 ;;                           filter-by-regex
-;;                 /       /        |              \                 \
-;; extract-hashtags extract-links split-into-words emotional-analysis tweet-output
-;;        /               /         |               \
-;;  hashtag-count links-output    word-count    emotion-output
+;;                 /       /        |               \
+;; extract-hashtags extract-links split-into-words tweet-output
+;;        /               /         |
+;;  hashtag-count links-output    word-count
 ;;      /                           |
 ;; top-hashtag-out            top-words-output
 
@@ -71,14 +78,11 @@
    [:filter-by-regex :extract-links]
    [:filter-by-regex :extract-hashtags]
    [:filter-by-regex :split-into-words]
-   [:split-into-words :hashtag-count]
-   ;[:split-into-words :word-count]
-   ;[:extract-hashtags :hashtag-count]
-   ;[:extract-links :output]
-   [:hashtag-count :top-words]
-   [:top-words :output]
-   [:filter-by-regex :output]
-   ])
+   [:split-into-words :word-count]
+   [:extract-hashtags :hashtag-count]
+   ;;[:extract-links :output]
+   ;;[:hashtag-count :top-words]
+   [:filter-by-regex :output]])
 
 (def catalog
   [{:onyx/name :input
@@ -132,25 +136,20 @@
     :onyx/type :function
     :onyx/group-by-key :word
     :onyx/consumption :concurrent
-    :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge
-    :lib-onyx.interval/ms 15000
+    :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge-words
+    :lib-onyx.interval/ms 3000
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :hashtag-count
-    :onyx/fn :onyx-timeline-example.onyx.component/word-count
+    :onyx/ident :lib-onyx.interval/recurring-action
+    :onyx/fn :onyx-timeline-example.onyx.component/hashtag-count
     :onyx/type :function
-    :onyx/group-by-key :word
+    ;; FIX: Grouping by key doesn't seem to work here. Onyx appears to throw the segments out?
+;;    :onyx/group-by-key :hashtag
     :onyx/consumption :concurrent
-    :onyx/batch-size batch-size
-    :onyx/batch-timeout batch-timeout
-    :onyx/doc "Reuses existing word-count function. Hashtags are words, too"}
-
-   {:onyx/name :top-words
-    :onyx/fn :onyx-timeline-example.onyx.component/top-words
-    :onyx/type :function
-    :onyx/group-by-key :word
-    :onyx/consumption :concurrent
+    :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge-hashtags
+    :lib-onyx.interval/ms 5000
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
@@ -162,22 +161,6 @@
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout
     :onyx/doc "Writes segments to a core.async channel"}])
-
-(defmethod l-ext/inject-lifecycle-resources :filter-by-regex
-  [_ {:keys [onyx.core/task-map]}]
-  {:onyx.core/params [(:timeline/regex task-map)]})
-
-(defmethod l-ext/inject-lifecycle-resources :word-count
-  [_ {:keys [onyx.core/queue] :as event}]
-  (let [local-state (atom {})]
-    {:onyx.core/params [local-state]
-     :timeline/state local-state}))
-
-(defmethod l-ext/inject-lifecycle-resources :hashtag-count
-  [_ {:keys [onyx.core/queue] :as event}]
-  (let [local-state (atom {})]
-    {:onyx.core/params [local-state]
-     :timeline/state local-state}))
 
 (defrecord Channel [conf]
   component/Lifecycle
@@ -236,6 +219,24 @@
 
     (defmethod l-ext/inject-lifecycle-resources :output
       [_ _] {:core-async/out-chan (:ch (:output-stream component))})
+
+    (defmethod l-ext/inject-lifecycle-resources :filter-by-regex
+      [_ {:keys [onyx.core/task-map]}]
+      {:onyx.core/params [(:timeline/regex task-map)]})
+
+    (defmethod l-ext/inject-lifecycle-resources :word-count
+      [_ {:keys [onyx.core/queue] :as event}]
+      (let [local-state (atom {})]
+        {:onyx.core/params [local-state]
+         :timeline/word-count-state local-state
+         :timeline/output-ch (:ch (:output-stream component))}))
+
+    (defmethod l-ext/inject-lifecycle-resources :hashtag-count
+      [_ {:keys [onyx.core/queue] :as event}]
+      (let [local-state (atom {})]
+        {:onyx.core/params [local-state]
+         :timeline/hashtag-count-state local-state
+         :timeline/output-ch (:ch (:output-stream component))}))
 
     (let [job-id (onyx.api/submit-job
                   (:conn onyx-connection)

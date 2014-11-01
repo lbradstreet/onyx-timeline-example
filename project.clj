@@ -19,7 +19,7 @@
                   :exclusions [commons-codec
                                com.google.guava/guava
                                org.apache.httpcomponents/httpclient]]
-                 [com.mdrogalis/onyx "0.4.0"]
+                 [com.mdrogalis/onyx "0.4.1-SNAPSHOT"]
                  [com.mdrogalis/onyx-core-async "0.4.0"]
                  [com.mdrogalis/lib-onyx "0.4.0"]
                  [com.taoensso/sente "1.2.0"]
