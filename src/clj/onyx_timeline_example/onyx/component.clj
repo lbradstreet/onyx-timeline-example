@@ -34,18 +34,20 @@
 
 (defn word-count [local-state {:keys [word] :as segment}]
   (swap! local-state (fn [state] (assoc state word (inc (get state word 0)))))
-  [])
+  ;[]
+  )
+
+(defn top-words [m]
+  {:top-words (->> m
+                   (into [])
+                   (sort-by second)
+                   (reverse)
+                   (take 15)
+                   (into {}))})
 
 (defn log-and-purge [event]
-  (clojure.pprint/pprint
-   (swap! (:timeline/state event)
-          (fn [state]
-            (->> state
-                 (into [])
-                 (sort-by second)
-                 (reverse)
-                 (take 15)
-                 (into {}))))))
+  (clojure.pprint/pprint 
+    (swap! (:timeline/state event) top-words)))
 
 (def batch-size 50)
 
@@ -69,9 +71,14 @@
    [:filter-by-regex :extract-links]
    [:filter-by-regex :extract-hashtags]
    [:filter-by-regex :split-into-words]
-   [:split-into-words :word-count]
-;   [:extract-hashtags :hashtag-count]
-   [:filter-by-regex :output]])
+   [:split-into-words :hashtag-count]
+   ;[:split-into-words :word-count]
+   ;[:extract-hashtags :hashtag-count]
+   ;[:extract-links :output]
+   [:hashtag-count :top-words]
+   [:top-words :output]
+   [:filter-by-regex :output]
+   ])
 
 (def catalog
   [{:onyx/name :input
@@ -138,6 +145,14 @@
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout
     :onyx/doc "Reuses existing word-count function. Hashtags are words, too"}
+
+   {:onyx/name :top-words
+    :onyx/fn :onyx-timeline-example.onyx.component/top-words
+    :onyx/type :function
+    :onyx/group-by-key :word
+    :onyx/consumption :concurrent
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :output
     :onyx/ident :core.async/write-to-chan
