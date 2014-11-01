@@ -1,3 +1,45 @@
 h1 {
   text-decoration: underline;
 }
+
+div.twitter-tweet-rendered p.entry-title {
+    font-family: Arial, sans-serif !important;
+    font-size: 14px !important;
+    padding: 5px !important;
+    background: #eee !important;
+    max-width: 300px !important;
+}
+
+div.twitter-tweet-rendered p.entry-title a.link {
+    font-family: Arial, sans-serif !important;
+    font-size: 14px !important;
+}
+
+div.twitter-tweet-rendered div.twt-border {
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+div.twitter-tweet-rendered iframe.twt-follow-button { display: none !important; }
+
+div.twitter-tweet-rendered div.footer ul.twt-actions {display: none !important;}
+
+div.twitter-tweet-rendered div.footer a.view-details {
+    display:block !important;
+    width: 120px !important;
+    margin: 5px 0 !important;
+    padding: 7px 0 !important;
+    background: #000 !important;
+    color: #fff !important;
+    text-decoration: none !important;
+    border-radius: 13px !important;
+    text-align: center !important;
+    box-shadow: -1px -1px 2px #555 !important;
+}
+    
+div.twitter-tweet-rendered div.footer a.view-details span {
+    font: 14px Georgia, serif !important;
+    color: #fff !important;
+}
+

@@ -19,4 +19,4 @@ resources/private/
 resources/public/js/out/
 resources/public/js/out/app.js
 data
-onyx.log
+onyx.log*

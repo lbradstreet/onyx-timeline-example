@@ -27,7 +27,7 @@
 
 (defn segment->msg [segment]
   (cond (contains? segment :tweet)
-        [:tweet/new (:tweet segment)]       
+        [:tweet/new segment]
         (contains? segment :top-words)
         [:agg/top-word-count (:top-words segment)]))
 

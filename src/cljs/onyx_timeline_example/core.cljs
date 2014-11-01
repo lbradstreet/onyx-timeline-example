@@ -33,9 +33,8 @@
   (match event
          [:chsk/state new-state] (print "Chsk state change:" new-state)
          [:chsk/recv payload] (let [[msg-type msg] payload]
-                                (println "Payload " payload)
                                 (match [msg-type msg]
-                                       [:tweet/new tweet-text] (put! timeline-chan tweet-text)
+                                       [:tweet/new tweet] (put! timeline-chan tweet)
                                        [:agg/top-word-count counts] (put! agg-chan counts)))
          :else (print "Unmatched event: %s" event)))
 
@@ -46,10 +45,11 @@
       (update-in [:items] (fn [tweets] 
                             (let [trunc-tweets (take 100 tweets)]
                               (cons {:id (:latest-id timeline)
-                                     :tweet tweet} 
+                                     :tweet-id (:tweet-id tweet)
+                                     :twitter-user (:twitter-user tweet)
+                                     :tweet (:text tweet)} 
                                     trunc-tweets))))
       (update-in [:latest-id] inc)))
-
 
 (defcomponent top-word-counts [data owner]
   (init-state  [_]
@@ -59,9 +59,7 @@
                        ; Use alt for now, may have some other channels here in the future
                        (alt!
                          (om/get-state owner :receive-chan)
-                         ([msg]
-                          (do (println (str "Received event on timeline channel: " msg))
-                              (om/update! data msg))))
+                         ([msg] (om/update! data msg)))
                        (recur)))
   (render-state [_ _]
                 (p/panel
@@ -88,8 +86,8 @@
                        (alt!
                          (om/get-state owner :receive-chan)
                          ([msg]
-                          (do (println (str "Received event on timeline channel: " msg))
-                              (om/transact! data #(add-tweet % msg)))))
+                            (om/transact! data #(add-tweet % msg))
+                            (.load (.-widgets js/twttr))))
                        (recur)))
   (render-state [_ _]
                 (p/panel
@@ -99,7 +97,13 @@
                                        (d/li {:key (:id item)
                                               :class "list-group-item"
                                               :style {}}
-                                             (:tweet item))))}
+                                             (:tweet item)
+                                             (d/blockquote
+                                              {:class "twitter-tweet"}
+                                              (d/a {:href (str "https://twitter.com/"
+                                                               (:twitter-user item)
+                                                               "/status/"
+                                                               (:tweet-id item))})))))}
                   nil)))
 
 (defcomponent app [data owner]

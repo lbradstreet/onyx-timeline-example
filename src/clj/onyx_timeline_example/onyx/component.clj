@@ -11,7 +11,9 @@
   (clojure.string/split s #"\s"))
 
 (defn extract-tweet [segment]
-  {:tweet (:text segment)})
+  {:tweet-id (str (:id segment))
+   :twitter-user (:screen_name (:user segment))
+   :tweet (:text segment)})
 
 (defn filter-by-regex [regex {:keys [tweet] :as segment}]
   (if (re-find regex tweet) segment []))
@@ -61,18 +63,6 @@
 
 (def batch-timeout 300)
 
-;;                                input
-;;                                  |
-;;                            extract-tweet
-;;                                  |
-;;                           filter-by-regex
-;;                 /       /        |               \
-;; extract-hashtags extract-links split-into-words tweet-output
-;;        /               /         |
-;;  hashtag-count links-output    word-count
-;;      /                           |
-;; top-hashtag-out            top-words-output
-
 (def workflow
   [[:input :extract-tweet]
    [:extract-tweet :filter-by-regex]
@@ -81,8 +71,6 @@
    [:filter-by-regex :split-into-words]
    [:split-into-words :word-count]
    [:extract-hashtags :hashtag-count]
-   ;;[:extract-links :output]
-   ;;[:hashtag-count :top-words]
    [:filter-by-regex :output]])
 
 (def catalog
