@@ -16,7 +16,7 @@
 (def agg-chan (chan))
 
 (defonce app-state (atom {:top-word-counts {}
-                          :timeline {:items []}}))
+                          :timeline {:tweets []}}))
 
 (def packer
   "Defines our packing (serialization) format for client<->server comms."
@@ -43,7 +43,7 @@
 
 (defn add-tweet [timeline tweet]
   (-> timeline
-      (update-in [:items] (fn [tweets] 
+      (update-in [:tweets] (fn [tweets] 
                             (let [trunc-tweets (take max-timeline-length tweets)]
                               (cons {:tweet-id (:tweet-id tweet)
                                      :twitter-user (:twitter-user tweet)
@@ -89,23 +89,23 @@
                             (om/transact! data #(add-tweet % msg))))
                        (recur)))
   (did-update [_ _ _]
-              (when (seq (:items data))
+              (when (seq (:tweets data))
                 (.load (.-widgets js/twttr))))
   (render-state [_ _]
                 (p/panel
                   {:header "Timeline"
                    :list-group (d/ul {:class "list-group"}
-                                     (for [item (:items data)]
-                                       (d/li {:key (:tweet-id item)
+                                     (for [tweet (:tweets data)]
+                                       (d/li {:key (:tweet-id tweet)
                                               :class "list-group-item"
                                               :style {}}
                                              (d/blockquote
                                                {:class "twitter-tweet"}
                                                (d/span {:class "small"} "Loading tweet...")
                                                (d/a {:href (str "https://twitter.com/"
-                                                                (:twitter-user item)
+                                                                (:twitter-user tweet)
                                                                 "/status/"
-                                                                (:tweet-id item))})))))}
+                                                                (:tweet-id tweet))})))))}
                   nil)))
 
 (defcomponent app [data owner]
