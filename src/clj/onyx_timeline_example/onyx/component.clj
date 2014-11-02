@@ -1,5 +1,5 @@
 (ns onyx-timeline-example.onyx.component
-  (:require [clojure.core.async :refer [chan >!! <!! close! sliding-buffer]]
+  (:require [clojure.core.async :refer [chan >!! <!! close!]]
             [clojure.data.fressian :as fressian]
             [com.stuartsierra.component :as component]
             [onyx.peer.task-lifecycle-extensions :as l-ext]
@@ -161,20 +161,6 @@
     :onyx/batch-timeout batch-timeout
     :onyx/doc "Writes segments to a core.async channel"}])
 
-(defrecord Channel [conf]
-  component/Lifecycle
-  (start [component]
-    (println "Starting Channel")
-    (let [capacity (:capacity (:core-async conf))]
-      (assoc component :ch (chan (sliding-buffer capacity)))))
-  (stop [component]
-    (println "Stopping Channel")
-    (when (:ch component)
-      (close! (:ch component)))
-    component))
-
-(defn new-channel [conf] (map->Channel {:conf conf}))
-
 (defrecord OnyxConnection [conf]
   component/Lifecycle
   (start [component]
@@ -208,6 +194,14 @@
 
 (defn new-onyx-peers [conf] (map->OnyxPeers {:conf conf}))
 
+(defmethod l-ext/inject-lifecycle-resources :input
+  [_ {:keys [onyx.core/peer-opts]}]
+  {:core-async/in-chan (:timeline/input-ch peer-opts)})
+
+(defmethod l-ext/inject-lifecycle-resources :output
+  [_ {:keys [onyx.core/peer-opts]}]
+  {:core-async/out-chan (:timeline/output-ch peer-opts)})
+
 (defmethod l-ext/inject-lifecycle-resources :filter-by-regex
   [_ {:keys [onyx.core/task-map]}]
   {:onyx.core/params [(:timeline/regex task-map)]})
@@ -232,20 +226,13 @@
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
     (println "Starting Onyx Job")
-
-    (defmethod l-ext/inject-lifecycle-resources :input
-      [_ _] {:core-async/in-chan (:ch (:input-stream component))})
-
-    (defmethod l-ext/inject-lifecycle-resources :output
-      [_ _] {:core-async/out-chan (:ch (:output-stream component))})
-
     (let [job-id (onyx.api/submit-job
                   (:conn onyx-connection)
                   {:catalog catalog :workflow workflow})]
       (assoc component :job-id job-id)))
   (stop [component]
     (println "Stopping Onyx Job")
-    (>!! (:ch (:input-stream component)) :done)
+    (>!! (:timeline/input-ch (:peer (:onyx conf))) :done)
     component))
 
 (defn new-onyx-job [conf] (map->OnyxJob {:conf conf}))

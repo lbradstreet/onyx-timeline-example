@@ -1,22 +1,28 @@
 (ns onyx-timeline-example.server
-  (:gen-class)
-  (:require [onyx-timeline-example.communicator.component :as comm]
+  (:require [clojure.core.async :refer [chan sliding-buffer]]
+            [clojure.tools.namespace.repl :refer [refresh]]
+            [clojure.edn :as edn]
+            [clojure.tools.logging :as log]
+            [onyx-timeline-example.communicator.component :as comm]
             [onyx-timeline-example.communicator.twitter :as twitter]
             [onyx-timeline-example.http.component :as http]
             [onyx-timeline-example.onyx.component :as onyx]
             [onyx-timeline-example.switchboard :as sw]
-            [clojure.tools.namespace.repl :refer  (refresh)]
             [environ.core :refer [env]]
-            [clojure.edn :as edn]
-            [clojure.tools.logging :as log]
-            [com.stuartsierra.component :as component]))
+            [com.stuartsierra.component :as component])
+  (:gen-class))
 
 (def onyx-id (java.util.UUID/randomUUID))
+
+(def capacity 1000)
+
+(def input-ch (chan (sliding-buffer capacity)))
+
+(def output-ch (chan (sliding-buffer capacity)))
 
 (def conf {:tw-check-interval-sec    10
            :tw-restart-wait          60
            :port                     8888
-           :core-async {:capacity 1000}
            :onyx {:coord {:hornetq/mode :vm ;; Run HornetQ inside the VM for convenience
                           :hornetq/server? true
                           :hornetq.server/type :vm
@@ -27,7 +33,9 @@
                           :onyx.coordinator/revoke-delay 5000}
                   :peer {:hornetq/mode :vm
                          :zookeeper/address "127.0.0.1:2185"
-                         :onyx/id onyx-id}
+                         :onyx/id onyx-id
+                         :timeline/input-ch input-ch
+                         :timeline/output-ch output-ch}
                   :num-peers 9
                   :coordinator-type :memory}})
 
@@ -36,20 +44,14 @@
   will bring up the individual components in the correct order."
   ;; Fix some of these keyword names.
   (component/system-map
-   :input-stream (onyx/new-channel conf)
-   :output-stream (onyx/new-channel conf)
-   :twitter (component/using (twitter/new-tweet-stream) [:input-stream])
-   :onyx-connection (component/using (onyx/new-onyx-connection conf)
-                                     [:input-stream :output-stream :twitter])
-   :onyx-peers (component/using (onyx/new-onyx-peers conf)
-                                [:onyx-connection])
-   :onyx-job (component/using (onyx/new-onyx-job conf)
-                              [:onyx-connection :input-stream :output-stream])
+   :twitter (twitter/new-tweet-stream conf)
+   :onyx-connection (component/using (onyx/new-onyx-connection conf) [:twitter])
+   :onyx-peers (component/using (onyx/new-onyx-peers conf) [:onyx-connection])
+   :onyx-job (component/using (onyx/new-onyx-job conf) [:onyx-connection])
    :comm-channels (comm/new-communicator-channels)
    :comm (component/using (comm/new-communicator) {:channels :comm-channels})
    :http (component/using (http/new-http-server conf) [:comm])
-   :switchboard (component/using (sw/new-switchboard)
-                                 [:comm-channels :output-stream])))
+   :switchboard (component/using (sw/new-switchboard conf) [:comm-channels])))
 
 (def system nil)
 

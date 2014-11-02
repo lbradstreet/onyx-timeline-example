@@ -21,17 +21,11 @@
     (finally
      (.stop client 500))))
 
-; (defn consume-firehose! [client message-queue ch]
-;   (while true
-;     (do
-;       (Thread/sleep 1000)
-;       (>!! ch {:text "hello how are you"}))))
-
-(defrecord TweetStream []
+(defrecord TweetStream [conf]
   component/Lifecycle
   (start [component]
     (println "Starting Tweet Stream")
-    (let [ch (:ch (:input-stream component))
+    (let [ch (:timeline/input-ch (:peer (:onyx conf)))
           consumer-key (env :twitter-consumer-key)
           consumer-secret (env :twitter-consumer-secret)
           token (env :twitter-token)
@@ -53,4 +47,4 @@
     (future-cancel (:firehose-fut component))
     component))
 
-(defn new-tweet-stream [] (map->TweetStream {}))
+(defn new-tweet-stream [conf] (map->TweetStream {:conf conf}))
