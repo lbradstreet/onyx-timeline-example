@@ -31,8 +31,10 @@
        (filter identity)
        (map (fn [hashtag] {:hashtag hashtag}))))
 
-(defn split-into-words [{:keys [tweet]}]
-  (map (fn [word] {:word word}) (into-words tweet)))
+(defn split-into-words [min-chars {:keys [tweet]}]
+  (->> (into-words tweet)
+       (filter (fn [word] (> (count word) min-chars)))
+       (map (fn [word] {:word word}))))
 
 (defn word-count [local-state {:keys [word] :as segment}]
   (swap! local-state (fn [state] (assoc state word (inc (get state word 0)))))
@@ -116,6 +118,7 @@
     :onyx/fn :onyx-timeline-example.onyx.component/split-into-words
     :onyx/type :function
     :onyx/consumption :concurrent
+    :timeline.word-count/min-chars 3
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
@@ -212,6 +215,10 @@
     (defmethod l-ext/inject-lifecycle-resources :filter-by-regex
       [_ {:keys [onyx.core/task-map]}]
       {:onyx.core/params [(:timeline/regex task-map)]})
+
+    (defmethod l-ext/inject-lifecycle-resources :split-into-words
+      [_ {:keys [onyx.core/task-map]}]
+      {:onyx.core/params [(:timeline.word-count/min-chars task-map)]})
 
     (defmethod l-ext/inject-lifecycle-resources :word-count
       [_ {:keys [onyx.core/queue] :as event}]

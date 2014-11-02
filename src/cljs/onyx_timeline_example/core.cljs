@@ -63,7 +63,7 @@
                        (recur)))
   (render-state [_ _]
                 (p/panel
-                  {:header "Word counts"
+                  {:header "Trending Words"
                    :list-group 
                    (table {:striped? true :bordered? true :condensed? true :hover? true}
                           (d/thead
