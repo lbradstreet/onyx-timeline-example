@@ -97,9 +97,9 @@
                                        (d/li {:key (:id item)
                                               :class "list-group-item"
                                               :style {}}
-                                             (:tweet item)
                                              (d/blockquote
                                               {:class "twitter-tweet"}
+                                              (d/span {:class "small"} "Loading tweet...")
                                               (d/a {:href (str "https://twitter.com/"
                                                                (:twitter-user item)
                                                                "/status/"
