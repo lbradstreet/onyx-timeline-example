@@ -40,10 +40,12 @@
 
 (defonce chsk-router (sente/start-chsk-router! ch-chsk event-handler))
 
+(def max-timeline-length 100)
+
 (defn add-tweet [timeline tweet]
   (-> timeline
       (update-in [:items] (fn [tweets] 
-                            (let [trunc-tweets (take 100 tweets)]
+                            (let [trunc-tweets (take max-timeline-length tweets)]
                               (cons {:id (:latest-id timeline)
                                      :tweet-id (:tweet-id tweet)
                                      :twitter-user (:twitter-user tweet)
