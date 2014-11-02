@@ -16,8 +16,7 @@
 (def agg-chan (chan))
 
 (defonce app-state (atom {:top-word-counts {}
-                          :timeline {:latest-id 0
-                                     :items []}}))
+                          :timeline {:items []}}))
 
 (def packer
   "Defines our packing (serialization) format for client<->server comms."
@@ -46,8 +45,7 @@
   (-> timeline
       (update-in [:items] (fn [tweets] 
                             (let [trunc-tweets (take max-timeline-length tweets)]
-                              (cons {:id (:latest-id timeline)
-                                     :tweet-id (:tweet-id tweet)
+                              (cons {:tweet-id (:tweet-id tweet)
                                      :twitter-user (:twitter-user tweet)
                                      :tweet (:tweet tweet)} 
                                     trunc-tweets))))
@@ -98,16 +96,16 @@
                   {:header "Timeline"
                    :list-group (d/ul {:class "list-group"}
                                      (for [item (:items data)]
-                                       (d/li {:key (:id item)
+                                       (d/li {:key (:tweet-id item)
                                               :class "list-group-item"
                                               :style {}}
                                              (d/blockquote
-                                              {:class "twitter-tweet"}
-                                              (d/span {:class "small"} "Loading tweet...")
-                                              (d/a {:href (str "https://twitter.com/"
-                                                               (:twitter-user item)
-                                                               "/status/"
-                                                               (:tweet-id item))})))))}
+                                               {:class "twitter-tweet"}
+                                               (d/span {:class "small"} "Loading tweet...")
+                                               (d/a {:href (str "https://twitter.com/"
+                                                                (:twitter-user item)
+                                                                "/status/"
+                                                                (:tweet-id item))})))))}
                   nil)))
 
 (defcomponent app [data owner]
