@@ -47,7 +47,7 @@
                               (cons {:id (:latest-id timeline)
                                      :tweet-id (:tweet-id tweet)
                                      :twitter-user (:twitter-user tweet)
-                                     :tweet (:text tweet)} 
+                                     :tweet (:tweet tweet)} 
                                     trunc-tweets))))
       (update-in [:latest-id] inc)))
 

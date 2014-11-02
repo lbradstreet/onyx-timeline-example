@@ -49,7 +49,7 @@
        (into [])
        (sort-by second)
        (reverse)
-       (take 15)
+       (take 8)
        (into {})))
 
 (defn log-and-purge-words [event]
