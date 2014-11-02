@@ -1,10 +1,11 @@
 (ns onyx-timeline-example.onyx.component
   (:require [clojure.core.async :refer [chan >!! <!! close! sliding-buffer]]
-            [clojure.tools.logging :as log]
+            [clojure.data.fressian :as fressian]
             [com.stuartsierra.component :as component]
             [onyx.peer.task-lifecycle-extensions :as l-ext]
-            [onyx.plugin.core-async]
+            [onyx.extensions :as extensions]
             [onyx.api]
+            [onyx.plugin.core-async]
             [lib-onyx.interval]))
 
 (defn into-words [s]
@@ -52,14 +53,19 @@
        (take 8)
        (into {})))
 
-(defn log-and-purge-words [event]
-  (let [result (swap! (:timeline/word-count-state event) top-words)]
-    (>!! (:timeline/output-ch event) {:top-words result})))
+(defn log-and-purge-words [{:keys [onyx.core/queue] :as event}]
+  (let [result (swap! (:timeline/word-count-state event) top-words)
+        compressed-state (fressian/write {:top-words result})]
+    (let [session (extensions/create-tx-session queue)]
+      (doseq [queue-name (:onyx.core/egress-queues event)]
+        (let [producer (extensions/create-producer queue session queue-name)]
+          (extensions/produce-message queue producer session compressed-state)
+          (extensions/close-resource queue producer)))
+      (extensions/commit-tx queue session)
+      (extensions/close-resource queue session))))
 
 (defn log-and-purge-hashtags [event]
-  (let [result (swap! (:timeline/hashtag-count-state event) top-words)]
-;;    (>!! (:timeline/output-ch event) {:top-hashtags result})
-    ))
+  (swap! (:timeline/hashtag-count-state event) top-words))
 
 (def batch-size 50)
 
@@ -73,7 +79,8 @@
    [:filter-by-regex :split-into-words]
    [:split-into-words :word-count]
    [:extract-hashtags :hashtag-count]
-   [:filter-by-regex :output]])
+   [:filter-by-regex :output]
+   [:word-count :output]])
 
 (def catalog
   [{:onyx/name :input
@@ -201,6 +208,26 @@
 
 (defn new-onyx-peers [conf] (map->OnyxPeers {:conf conf}))
 
+(defmethod l-ext/inject-lifecycle-resources :filter-by-regex
+  [_ {:keys [onyx.core/task-map]}]
+  {:onyx.core/params [(:timeline/regex task-map)]})
+
+(defmethod l-ext/inject-lifecycle-resources :split-into-words
+  [_ {:keys [onyx.core/task-map]}]
+  {:onyx.core/params [(:timeline.word-count/min-chars task-map)]})
+
+(defmethod l-ext/inject-lifecycle-resources :word-count
+  [_ {:keys [onyx.core/queue] :as event}]
+  (let [local-state (atom {})]
+    {:onyx.core/params [local-state]
+     :timeline/word-count-state local-state}))
+
+(defmethod l-ext/inject-lifecycle-resources :hashtag-count
+  [_ {:keys [onyx.core/queue] :as event}]
+  (let [local-state (atom {})]
+    {:onyx.core/params [local-state]
+     :timeline/hashtag-count-state local-state}))
+
 (defrecord OnyxJob [conf]
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
@@ -211,28 +238,6 @@
 
     (defmethod l-ext/inject-lifecycle-resources :output
       [_ _] {:core-async/out-chan (:ch (:output-stream component))})
-
-    (defmethod l-ext/inject-lifecycle-resources :filter-by-regex
-      [_ {:keys [onyx.core/task-map]}]
-      {:onyx.core/params [(:timeline/regex task-map)]})
-
-    (defmethod l-ext/inject-lifecycle-resources :split-into-words
-      [_ {:keys [onyx.core/task-map]}]
-      {:onyx.core/params [(:timeline.word-count/min-chars task-map)]})
-
-    (defmethod l-ext/inject-lifecycle-resources :word-count
-      [_ {:keys [onyx.core/queue] :as event}]
-      (let [local-state (atom {})]
-        {:onyx.core/params [local-state]
-         :timeline/word-count-state local-state
-         :timeline/output-ch (:ch (:output-stream component))}))
-
-    (defmethod l-ext/inject-lifecycle-resources :hashtag-count
-      [_ {:keys [onyx.core/queue] :as event}]
-      (let [local-state (atom {})]
-        {:onyx.core/params [local-state]
-         :timeline/hashtag-count-state local-state
-         :timeline/output-ch (:ch (:output-stream component))}))
 
     (let [job-id (onyx.api/submit-job
                   (:conn onyx-connection)
