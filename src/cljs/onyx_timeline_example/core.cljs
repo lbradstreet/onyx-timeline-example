@@ -86,9 +86,11 @@
                        (alt!
                          (om/get-state owner :receive-chan)
                          ([msg]
-                            (om/transact! data #(add-tweet % msg))
-                            (.load (.-widgets js/twttr))))
+                            (om/transact! data #(add-tweet % msg))))
                        (recur)))
+  (did-update [_ _ _]
+              (when (seq (:items data))
+                (.load (.-widgets js/twttr))))
   (render-state [_ _]
                 (p/panel
                   {:header "Timeline"
