@@ -106,7 +106,7 @@
     :onyx/fn :onyx-timeline-example.onyx.component/filter-by-regex
     :onyx/type :function
     :onyx/consumption :concurrent
-    :timeline/regex #"(?i).*Halloween.*"
+    :timeline/regex #"(?i).*(Halloween|Christmas).*"
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
