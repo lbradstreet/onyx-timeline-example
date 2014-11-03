@@ -36,7 +36,7 @@
                          :onyx/id onyx-id
                          :timeline/input-ch input-ch
                          :timeline/output-ch output-ch}
-                  :num-peers 9
+                  :num-peers 8
                   :coordinator-type :memory}})
 
 (defn get-system [conf]

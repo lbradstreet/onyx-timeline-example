@@ -13,9 +13,11 @@
 
 ; Put channels in root shared rather than refer to def
 (def timeline-chan (chan))
-(def agg-chan (chan))
+(def words-agg-chan (chan))
+(def hashtags-agg-chan (chan))
 
 (defonce app-state (atom {:top-word-counts {}
+                          :top-hashtag-counts {}
                           :timeline {:tweets []}}))
 
 (def packer
@@ -34,7 +36,8 @@
          [:chsk/recv payload] (let [[msg-type msg] payload]
                                 (match [msg-type msg]
                                        [:tweet/new tweet] (put! timeline-chan tweet)
-                                       [:agg/top-word-count counts] (put! agg-chan counts)))
+                                       [:agg/top-word-count counts] (put! words-agg-chan counts)
+                                       [:agg/top-hashtag-count counts] (put! hashtags-agg-chan counts)))
          :else (print "Unmatched event: %s" event)))
 
 (defonce chsk-router (sente/start-chsk-router! ch-chsk event-handler))
@@ -53,7 +56,7 @@
 
 (defcomponent top-word-counts [data owner]
   (init-state  [_]
-              {:receive-chan (:agg-chan (om/get-shared owner :comms))})
+              {:receive-chan (:words-agg-chan (om/get-shared owner :comms))})
   (will-mount [_]
               (go-loop [] 
                        ; Use alt for now, may have some other channels here in the future
@@ -70,6 +73,32 @@
                             (d/tr
                               (d/th "Count")
                               (d/th "Word")))
+                          (d/tbody
+                            (for [word-count (reverse (sort-by val data))]
+                              (d/tr {:key (key word-count)}
+                                    (d/td (val word-count))
+                                    (d/td (key word-count))))))}
+                  nil)))
+
+(defcomponent top-hashtag-counts [data owner]
+  (init-state  [_]
+              {:receive-chan (:hashtags-agg-chan (om/get-shared owner :comms))})
+  (will-mount [_]
+              (go-loop [] 
+                       ; Use alt for now, may have some other channels here in the future
+                       (alt!
+                         (om/get-state owner :receive-chan)
+                         ([msg] (om/update! data msg)))
+                       (recur)))
+  (render-state [_ _]
+                (p/panel
+                  {:header "Trending Hashtags"
+                   :list-group 
+                   (table {:striped? true :bordered? true :condensed? true :hover? true}
+                          (d/thead
+                            (d/tr
+                              (d/th "Count")
+                              (d/th "Hashtag")))
                           (d/tbody
                             (for [word-count (reverse (sort-by val data))]
                               (d/tr {:key (key word-count)}
@@ -117,11 +146,13 @@
                                  (g/col {:xs 12 :md 8}
                                         (om/build timeline (:timeline data) {}))
                                  (g/col {:xs 6 :md 4}
-                                        (om/build top-word-counts (:top-word-counts data) {})))))))
+                                        (om/build top-word-counts (:top-word-counts data) {})
+                                        (om/build top-hashtag-counts (:top-hashtag-counts data) {})))))))
 
 (defn main []
   (om/root app 
            app-state 
            {:target (. js/document (getElementById "app"))
             :shared {:comms {:timeline timeline-chan
-                             :agg-chan agg-chan}}}))
+                             :words-agg-chan words-agg-chan
+                             :hashtags-agg-chan hashtags-agg-chan}}}))

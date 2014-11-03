@@ -19,13 +19,6 @@
 (defn filter-by-regex [regex {:keys [tweet] :as segment}]
   (if (re-find regex tweet) segment []))
 
-(defn extract-links [{:keys [tweet]}]
-  (->> (into-words tweet)
-       (map (partial re-matches #"http(s)?:\/\/.*"))
-       (map first)
-       (filter identity)
-       (map (fn [link] {:link link}))))
-
 (defn extract-hashtags [{:keys [tweet]}]
   (->> (into-words tweet)
        (map (partial re-matches #"#.*"))
@@ -37,9 +30,11 @@
        (filter (fn [word] (> (count word) min-chars)))
        (map (fn [word] {:word word}))))
 
-(defn word-count [local-state {:keys [word] :as segment}]
-  (swap! local-state (fn [state] (assoc state word (inc (get state word 0)))))
-  [])
+(defn word-count [local-state exclude-hashtags? {:keys [word] :as segment}]
+  (if (and exclude-hashtags? (.startsWith word "#"))
+    []
+    (do (swap! local-state (fn [state] (assoc state word (inc (get state word 0)))))
+        [])))
 
 (defn hashtag-count [local-state {:keys [hashtag] :as segment}]
   (swap! local-state (fn [state] (assoc state hashtag (inc (get state hashtag 0)))))
@@ -64,8 +59,16 @@
       (extensions/commit-tx queue session)
       (extensions/close-resource queue session))))
 
-(defn log-and-purge-hashtags [event]
-  (swap! (:timeline/hashtag-count-state event) top-words))
+(defn log-and-purge-hashtags [{:keys [onyx.core/queue] :as event}]
+  (let [result (swap! (:timeline/hashtag-count-state event) top-words)
+        compressed-state (fressian/write {:top-hashtags result})]
+    (let [session (extensions/create-tx-session queue)]
+      (doseq [queue-name (:onyx.core/egress-queues event)]
+        (let [producer (extensions/create-producer queue session queue-name)]
+          (extensions/produce-message queue producer session compressed-state)
+          (extensions/close-resource queue producer)))
+      (extensions/commit-tx queue session)
+      (extensions/close-resource queue session))))
 
 (def batch-size 50)
 
@@ -74,13 +77,13 @@
 (def workflow
   [[:input :extract-tweet]
    [:extract-tweet :filter-by-regex]
-   [:filter-by-regex :extract-links]
-   [:filter-by-regex :extract-hashtags]
    [:filter-by-regex :split-into-words]
+   [:filter-by-regex :extract-hashtags]
    [:split-into-words :word-count]
    [:extract-hashtags :hashtag-count]
    [:filter-by-regex :output]
-   [:word-count :output]])
+   [:word-count :output]
+   [:hashtag-count :output]])
 
 (def catalog
   [{:onyx/name :input
@@ -107,13 +110,6 @@
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
-   {:onyx/name :extract-links
-    :onyx/fn :onyx-timeline-example.onyx.component/extract-links
-    :onyx/type :function
-    :onyx/consumption :concurrent
-    :onyx/batch-size batch-size
-    :onyx/batch-timeout batch-timeout}
-
    {:onyx/name :extract-hashtags
     :onyx/fn :onyx-timeline-example.onyx.component/extract-hashtags
     :onyx/type :function
@@ -125,7 +121,7 @@
     :onyx/fn :onyx-timeline-example.onyx.component/split-into-words
     :onyx/type :function
     :onyx/consumption :concurrent
-    :timeline.word-count/min-chars 3
+    :timeline.words/min-chars 3
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
@@ -135,6 +131,7 @@
     :onyx/type :function
     :onyx/group-by-key :word
     :onyx/consumption :concurrent
+    :timeline.words/exclude-hashtags? true
     :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge-words
     :lib-onyx.interval/ms 3000
     :onyx/batch-size batch-size
@@ -144,8 +141,7 @@
     :onyx/ident :lib-onyx.interval/recurring-action
     :onyx/fn :onyx-timeline-example.onyx.component/hashtag-count
     :onyx/type :function
-    ;; FIX: Grouping by key doesn't seem to work here. Onyx appears to throw the segments out?
-;;    :onyx/group-by-key :hashtag
+    :onyx/group-by-key :hashtag
     :onyx/consumption :concurrent
     :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge-hashtags
     :lib-onyx.interval/ms 5000
@@ -208,12 +204,12 @@
 
 (defmethod l-ext/inject-lifecycle-resources :split-into-words
   [_ {:keys [onyx.core/task-map]}]
-  {:onyx.core/params [(:timeline.word-count/min-chars task-map)]})
+  {:onyx.core/params [(:timeline.words/min-chars task-map)]})
 
 (defmethod l-ext/inject-lifecycle-resources :word-count
-  [_ {:keys [onyx.core/queue] :as event}]
+  [_ {:keys [onyx.core/queue onyx.core/task-map] :as event}]
   (let [local-state (atom {})]
-    {:onyx.core/params [local-state]
+    {:onyx.core/params [local-state (:timeline.words/exclude-hashtags? task-map)]
      :timeline/word-count-state local-state}))
 
 (defmethod l-ext/inject-lifecycle-resources :hashtag-count

@@ -29,7 +29,9 @@
   (cond (contains? segment :tweet)
         [:tweet/new segment]
         (contains? segment :top-words)
-        [:agg/top-word-count (:top-words segment)]))
+        [:agg/top-word-count (:top-words segment)]
+        (contains? segment :top-hashtags)
+        [:agg/top-hashtag-count (:top-hashtags segment)]))
 
 (defn send-stream [uids chsk-send!]
   "deliver percolation matches to interested clients"
