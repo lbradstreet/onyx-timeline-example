@@ -45,14 +45,12 @@
 (def max-timeline-length 100)
 
 (defn add-tweet [timeline tweet]
-  (-> timeline
-      (update-in [:tweets] (fn [tweets] 
-                            (let [trunc-tweets (take max-timeline-length tweets)]
-                              (cons {:tweet-id (:tweet-id tweet)
-                                     :twitter-user (:twitter-user tweet)
-                                     :tweet (:tweet tweet)} 
-                                    trunc-tweets))))
-      (update-in [:latest-id] inc)))
+  (update-in timeline [:tweets] (fn [tweets] 
+                                  (let [trunc-tweets (take max-timeline-length tweets)]
+                                    (cons {:tweet-id (:tweet-id tweet)
+                                           :twitter-user (:twitter-user tweet)
+                                           :tweet (:tweet tweet)} 
+                                          trunc-tweets)))))
 
 (defcomponent top-word-counts [data owner]
   (init-state  [_]
