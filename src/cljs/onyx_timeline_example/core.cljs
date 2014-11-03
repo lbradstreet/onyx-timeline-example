@@ -45,14 +45,12 @@
 (def max-timeline-length 100)
 
 (defn add-tweet [timeline tweet]
-  (-> timeline
-      (update-in [:tweets] (fn [tweets] 
-                            (let [trunc-tweets (take max-timeline-length tweets)]
-                              (cons {:tweet-id (:tweet-id tweet)
-                                     :twitter-user (:twitter-user tweet)
-                                     :tweet (:tweet tweet)} 
-                                    trunc-tweets))))
-      (update-in [:latest-id] inc)))
+  (update-in timeline [:tweets] (fn [tweets] 
+                                  (let [trunc-tweets (take max-timeline-length tweets)]
+                                    (cons {:tweet-id (:tweet-id tweet)
+                                           :twitter-user (:twitter-user tweet)
+                                           :tweet (:tweet tweet)} 
+                                          trunc-tweets)))))
 
 (defcomponent top-word-counts [data owner]
   (init-state  [_]
@@ -106,6 +104,20 @@
                                     (d/td (key word-count))))))}
                   nil)))
 
+(defcomponent tweet-widget [tweet owner]
+  (render [_]
+          (d/div nil 
+                 (d/blockquote
+                   {:ref "twitter-tweet-blockquote"
+                    :class "twitter-tweet"}
+                   (d/span {:class "small"} "Loading tweet...")
+                   (d/a {:href (str "https://twitter.com/"
+                                    (:twitter-user tweet)
+                                    "/status/"
+                                    (:tweet-id tweet))}))))
+  (did-mount [_]
+             (.load (.-widgets js/twttr) (om/get-node owner))))
+
 (defcomponent timeline [data owner]
   (init-state  [_]
               {:receive-chan (:timeline (om/get-shared owner :comms))})
@@ -117,9 +129,6 @@
                          ([msg]
                             (om/transact! data #(add-tweet % msg))))
                        (recur)))
-  (did-update [_ _ _]
-              (when (seq (:tweets data))
-                (.load (.-widgets js/twttr))))
   (render-state [_ _]
                 (p/panel
                   {:header "Timeline"
@@ -128,13 +137,7 @@
                                        (d/li {:key (:tweet-id tweet)
                                               :class "list-group-item"
                                               :style {}}
-                                             (d/blockquote
-                                               {:class "twitter-tweet"}
-                                               (d/span {:class "small"} "Loading tweet...")
-                                               (d/a {:href (str "https://twitter.com/"
-                                                                (:twitter-user tweet)
-                                                                "/status/"
-                                                                (:tweet-id tweet))})))))}
+                                             (om/build tweet-widget tweet {}))))}
                   nil)))
 
 (defcomponent app [data owner]
