@@ -75,18 +75,18 @@
 (def batch-timeout 300)
 
 (def workflow
-  [[:input :extract-tweet]
+  [[:in :extract-tweet]
    [:extract-tweet :filter-by-regex]
    [:filter-by-regex :split-into-words]
    [:filter-by-regex :extract-hashtags]
    [:split-into-words :word-count]
    [:extract-hashtags :hashtag-count]
-   [:filter-by-regex :output]
-   [:word-count :output]
-   [:hashtag-count :output]])
+   [:filter-by-regex :out]
+   [:word-count :out]
+   [:hashtag-count :out]])
 
 (def catalog
-  [{:onyx/name :input
+  [{:onyx/name :in
     :onyx/ident :core.async/read-from-chan
     :onyx/type :input
     :onyx/medium :core.async
@@ -148,7 +148,7 @@
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
-   {:onyx/name :output
+   {:onyx/name :out
     :onyx/ident :core.async/write-to-chan
     :onyx/type :output
     :onyx/medium :core.async
@@ -190,11 +190,12 @@
 
 (defn new-onyx-peers [conf] (map->OnyxPeers {:conf conf}))
 
-(defmethod l-ext/inject-lifecycle-resources :input
+(defmethod l-ext/inject-lifecycle-resources :in
   [_ {:keys [onyx.core/peer-opts]}]
+  (prn "Input calling")
   {:core-async/in-chan (:timeline/input-ch peer-opts)})
 
-(defmethod l-ext/inject-lifecycle-resources :output
+(defmethod l-ext/inject-lifecycle-resources :out
   [_ {:keys [onyx.core/peer-opts]}]
   {:core-async/out-chan (:timeline/output-ch peer-opts)})
 
