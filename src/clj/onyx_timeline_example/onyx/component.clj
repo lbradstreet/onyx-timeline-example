@@ -1,5 +1,5 @@
 (ns onyx-timeline-example.onyx.component
-  (:require [clojure.core.async :refer [chan >!! <!! close!]]
+  (:require [clojure.core.async :as a :refer [pipe chan >!! <!! close!]]
             [clojure.data.fressian :as fressian]
             [com.stuartsierra.component :as component]
             [onyx.peer.task-lifecycle-extensions :as l-ext]
@@ -106,7 +106,7 @@
     :onyx/fn :onyx-timeline-example.onyx.component/filter-by-regex
     :onyx/type :function
     :onyx/consumption :concurrent
-    :timeline/regex #"(?i).*(Halloween|Thanksgiving|Christmas).*"
+    :timeline/regex #".*" ;#"(?i).*(Halloween|Thanksgiving|Christmas).*"
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
@@ -192,8 +192,14 @@
 
 (defmethod l-ext/inject-lifecycle-resources :in
   [_ {:keys [onyx.core/peer-opts]}]
-  (prn "Input calling")
-  {:core-async/in-chan (:timeline/input-ch peer-opts)})
+  ; Although we could just tap the input chan mult, we would have no way
+  ; to send a :done sentinel to the job without stopping any other jobs 
+  ; that depend on the timeline channel. Therefore we pipe the tapped
+  ; timeline in, and only send the :done to the in chan.
+  (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-opts) (chan))
+        in (chan)
+        _ (pipe timeline-tap in)]
+    {:core-async/in-chan in}))
 
 (defmethod l-ext/inject-lifecycle-resources :out
   [_ {:keys [onyx.core/peer-opts]}]
@@ -229,6 +235,7 @@
       (assoc component :job-id job-id)))
   (stop [component]
     (println "Stopping Onyx Job")
+    ; Need to fix this to put :done on the in chan that is tapped to
     (>!! (:timeline/input-ch (:peer (:onyx conf))) :done)
     component))
 
