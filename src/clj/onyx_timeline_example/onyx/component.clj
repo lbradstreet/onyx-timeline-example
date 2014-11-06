@@ -323,7 +323,7 @@
                                         vals)
                                 job-id (onyx.api/submit-job (:conn onyx-connection)
                                                             {:catalog cat :workflow client-workflow})]
-                            (println "Submitted job " job-id))) 
+                            (println "Submitted job " job-id)))) 
                  (recur)))
       (assoc component :command-ch cmd-ch)))
   (stop [component]
