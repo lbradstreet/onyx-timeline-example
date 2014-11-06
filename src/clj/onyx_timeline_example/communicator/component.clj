@@ -12,16 +12,17 @@
 ;; serialization format for client<->server comm
 (def packer (sente-transit/get-flexi-packer :json))
 
-(defrecord SenteCommunicator [channels chsk-router]
+(defrecord SenteCommunicator [channels onyx-scheduler chsk-router]
   component/Lifecycle
   (start [component]
     (println "Starting Sente Communicator Component")
     (let [{:keys [ch-recv send-fn ajax-post-fn ajax-get-or-ws-handshake-fn connected-uids]}
           (sente/make-channel-socket! {:packer packer :user-id-fn ws/user-id-fn})
-          event-handler identity        ; FIXME 
+          event-handler (ws/make-handler (:command-ch onyx-scheduler))
           chsk-router (sente/start-chsk-router! ch-recv event-handler)]
       (ws/send-loop (:timeline/sente-ch channels) (ws/send-stream connected-uids send-fn))
-      (assoc component :ajax-post-fn ajax-post-fn
+      (assoc component 
+             :ajax-post-fn ajax-post-fn
              :ajax-get-or-ws-handshake-fn ajax-get-or-ws-handshake-fn
              :chsk-router chsk-router)))
   (stop [component]
