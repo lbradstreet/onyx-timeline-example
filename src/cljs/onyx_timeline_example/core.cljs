@@ -3,6 +3,8 @@
                    [cljs.core.async.macros :refer [go-loop go alt!]])
   (:require [om.core :as om :include-macros true]
             [om-bootstrap.panel :as p]
+            [om-bootstrap.button :as b]
+            [om-bootstrap.input :as i]
             [om-bootstrap.table :refer  [table]]
             [om-bootstrap.grid :as g]
             [om-tools.dom :as d :include-macros true]
@@ -13,11 +15,13 @@
 
 ; Put channels in root shared rather than refer to def
 (def timeline-chan (chan))
+(def custom-filter-chan (chan))
 (def words-agg-chan (chan))
 (def hashtags-agg-chan (chan))
 
 (defonce app-state (atom {:top-word-counts {}
                           :top-hashtag-counts {}
+                          :custom-filter-timeline {:tweets []}
                           :timeline {:tweets []}}))
 
 (def packer
@@ -35,7 +39,9 @@
          [:chsk/state new-state] (print "Chsk state change:" new-state)
          [:chsk/recv payload] (let [[msg-type msg] payload]
                                 (match [msg-type msg]
+                                       [:onyx/job msg] (println "Onyx job " msg)
                                        [:tweet/new tweet] (put! timeline-chan tweet)
+                                       [:tweet/new-user-filter tweet] (put! custom-filter-chan tweet)
                                        [:agg/top-word-count counts] (put! words-agg-chan counts)
                                        [:agg/top-hashtag-count counts] (put! hashtags-agg-chan counts)))
          :else (print "Unmatched event: %s" event)))
@@ -106,7 +112,7 @@
 
 (defcomponent tweet-widget [tweet owner]
   (render [_]
-          (d/div nil 
+          (d/div {:style {}}
                  (d/blockquote
                    {:ref "twitter-tweet-blockquote"
                     :class "twitter-tweet"}
@@ -116,11 +122,14 @@
                                     "/status/"
                                     (:tweet-id tweet))}))))
   (did-mount [_]
-             (.load (.-widgets js/twttr) (om/get-node owner))))
+             (let [node (om/get-node owner)]
+               ;(println "Scrolltop is " (.-scrollTop node) " height is " (.-scrollHeight node))
+               ;(.scrollTo js/window (.-scrollX js/window) 300)
+               (.load (.-widgets js/twttr) node))))
 
-(defcomponent timeline [data owner]
+(defcomponent timeline [data owner opts]
   (init-state  [_]
-              {:receive-chan (:timeline (om/get-shared owner :comms))})
+              {:receive-chan (:timeline-ch opts)})
   (will-mount [_]
               (go-loop [] 
                        ; Use alt for now, may have some other channels here in the future
@@ -129,26 +138,51 @@
                          ([msg]
                             (om/transact! data #(add-tweet % msg))))
                        (recur)))
+  (did-mount [_]
+             (println "Mounted timeline, time to resize and attach to window resize event."))
   (render-state [_ _]
                 (p/panel
                   {:header "Timeline"
-                   :list-group (d/ul {:class "list-group"}
+                   :list-group (d/ul {:class "list-group"
+                                      :style {:overflow-y "scroll"
+                                              :height "500px"}}
                                      (for [tweet (:tweets data)]
                                        (d/li {:key (:tweet-id tweet)
-                                              :class "list-group-item"
-                                              :style {}}
+                                              :class "list-group-item"}
                                              (om/build tweet-widget tweet {}))))}
                   nil)))
 
 (defcomponent app [data owner]
-  (render-state [_ _]
+  (did-mount [_]
+             (.bind (.-events js/twttr) "rendered" (fn [widget] (println "Created widget " #_(.-id widget)))))
+  (render-state [_ {:keys [regex-str]}]
                 (d/div
                   {:class "grids-examples"}
+                  (b/toolbar {} 
+                             (i/input {:type "text" 
+                                       :label "Custom Filter Regex"
+                                       :on-change (fn [e] (om/set-state! owner :regex-str (.. e -target -value)))})
+                             (b/button {:on-click
+                                        (fn [e] (chsk-send! [:job/start {:regex-str regex-str}] ; event
+                                                            8000 ; timeout
+                                                            ;; Optional callback:
+                                                            (fn [edn-reply]
+                                                              ; Checks for :chsk/closed, :chsk/timeout, :chsk/error
+                                                              (if (sente/cb-success? edn-reply) 
+                                                                (println "Successful sente reply " edn-reply)
+                                                                (println "Error! " edn-reply)))))}
+                                       "Send filter job"))
                   (g/grid {}
                           (g/row {:class "show-grid"}
-                                 (g/col {:xs 12 :md 8}
-                                        (om/build timeline (:timeline data) {}))
-                                 (g/col {:xs 6 :md 4}
+                                 (g/col {:xs 6 :md 8}
+                                        (om/build timeline 
+                                                  (:custom-filter-timeline data) 
+                                                  {:opts {:timeline-ch (:custom-filter (om/get-shared owner :comms))} }))
+                                 (g/col {:xs 6 :md 8}
+                                        (om/build timeline 
+                                                  (:timeline data) 
+                                                  {:opts {:timeline-ch (:timeline (om/get-shared owner :comms))} }))
+                                 (g/col {:xs 4 :md 4}
                                         (om/build top-word-counts (:top-word-counts data) {})
                                         (om/build top-hashtag-counts (:top-hashtag-counts data) {})))))))
 
@@ -157,5 +191,6 @@
            app-state 
            {:target (. js/document (getElementById "app"))
             :shared {:comms {:timeline timeline-chan
+                             :custom-filter custom-filter-chan
                              :words-agg-chan words-agg-chan
                              :hashtags-agg-chan hashtags-agg-chan}}}))
