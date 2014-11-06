@@ -10,6 +10,7 @@
     [compojure.handler :refer [api]]
     [net.cgrand.enlive-html :refer [deftemplate]]
     [ring.middleware.reload :as reload]
+    [ring.middleware.session :refer [wrap-session]]
     [ring.middleware.defaults]
     [ring.util.response :refer [resource-response response content-type]]
     [compojure.core     :as comp :refer (defroutes GET POST)]

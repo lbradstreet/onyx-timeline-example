@@ -1,6 +1,8 @@
 (ns onyx-timeline-example.onyx.component
-  (:require [clojure.core.async :as a :refer [pipe chan >!! <!! close!]]
+  (:require [clojure.core.async :as a :refer [go-loop pipe chan >!! <!! close!]]
             [clojure.data.fressian :as fressian]
+            [clojure.core.match :as match :refer (match)]
+            [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
             [onyx.peer.task-lifecycle-extensions :as l-ext]
             [onyx.extensions :as extensions]
@@ -70,6 +72,9 @@
       (extensions/commit-tx queue session)
       (extensions/close-resource queue session))))
 
+(defn wrap-sente-user-info [user segment]
+  (assoc segment :sente/user user))
+
 (def batch-size 50)
 
 (def batch-timeout 300)
@@ -91,9 +96,18 @@
     :onyx/type :input
     :onyx/medium :core.async
     :onyx/consumption :sequential
-    :onyx/batch-size batch-size
+    :onyx/batch-size batch-size 
     :onyx/batch-timeout batch-timeout
     :onyx/doc "Reads segments from a core.async channel"}
+
+   {:onyx/name :in-take
+    :onyx/ident :core.async/read-from-chan
+    :onyx/type :input
+    :onyx/medium :core.async
+    :onyx/consumption :sequential
+    :onyx/batch-size batch-size 
+    :onyx/batch-timeout batch-timeout
+    :onyx/doc "Reads counted number of segments from a core.async channel"}
 
    {:onyx/name :extract-tweet
     :onyx/fn :onyx-timeline-example.onyx.component/extract-tweet
@@ -106,7 +120,7 @@
     :onyx/fn :onyx-timeline-example.onyx.component/filter-by-regex
     :onyx/type :function
     :onyx/consumption :concurrent
-    :timeline/regex #".*" ;#"(?i).*(Halloween|Thanksgiving|Christmas).*"
+    :timeline/regex #"(?i).*(Halloween|Thanksgiving|Christmas).*"
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
@@ -146,6 +160,14 @@
     :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge-hashtags
     :lib-onyx.interval/ms 5000
     :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
+
+   {:onyx/name :wrap-sente-user-info
+    :onyx/fn :onyx-timeline-example.onyx.component/wrap-sente-user-info
+    :onyx/type :function
+    :onyx/consumption :concurrent
+    :onyx/batch-size batch-size
+    :sente/client :any
     :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :out
@@ -225,6 +247,19 @@
     {:onyx.core/params [local-state]
      :timeline/hashtag-count-state local-state}))
 
+(defmethod l-ext/inject-lifecycle-resources :wrap-sente-user-info
+  [_ {:keys [onyx.core/task-map]}]
+  {:onyx.core/params [(:sente/uid task-map)]})
+
+(defmethod l-ext/inject-lifecycle-resources :in-take
+  [_ {:keys [onyx.core/peer-opts onyx.core/task-map]}]
+  ; Although we could just tap the input chan mult, we would have no way
+  ; to send a :done sentinel to the job without stopping any other jobs 
+  ; that depend on the timeline channel. Therefore we pipe the tapped
+  ; timeline in, and only send the :done to the in chan.
+  (let [in (get-in (-> peer-opts :scheduler/jobs deref) [(:sente/uid task-map) :input-ch])]
+    {:core-async/in-chan in}))
+
 (defrecord OnyxJob [conf]
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
@@ -240,3 +275,62 @@
     component))
 
 (defn new-onyx-job [conf] (map->OnyxJob {:conf conf}))
+
+; May just be able to use a/take. Had some problems before.
+(defn pipe-input-take [timeline-in cnt]
+  ; Although we could just tap the input chan mult, we would have no way
+  ; to send a :done sentinel to the job without stopping any other jobs 
+  ; that depend on the timeline channel. Therefore we pipe the tapped
+  ; timeline in, and only send the :done to the in chan.
+  (let [in (chan)]
+    (go-loop [n cnt]
+             (if-not (zero? n)
+               (do (>!! in (<!! timeline-in))
+                   (recur (dec n)))
+               (do (>!! in :done)
+                   (close! timeline-in)
+                   (close! in))))
+    in))
+
+(def client-workflow
+  [[:in-take :extract-tweet]
+   [:extract-tweet :filter-by-regex]
+   [:filter-by-regex :wrap-sente-user-info]
+   [:wrap-sente-user-info :out]])
+
+(defrecord OnyxScheduler [conf]
+  component/Lifecycle
+  (start [{:keys [onyx-connection] :as component}]
+    (println "Starting Onyx Scheduler")
+    (let [cmd-ch (:scheduler/command-ch (:peer (:onyx conf)))]
+      (go-loop []
+               (let [msg (<!! cmd-ch)]
+                 (match msg
+                        [:start-filter-job [regex uid]]
+                        (do
+                          (let [timeline-tap (a/tap (-> conf :onyx :peer :timeline/input-ch-mult) (chan))
+                                task-input-ch (pipe-input-take timeline-tap 1000)
+                                jobs (-> conf :onyx :peer :scheduler/jobs)
+                                ; Add a comment here about how an atom wouldn't be necessary 
+                                ; if we use a queue where we pass in serializable parameters
+                                ; via the task-opts.
+                                _ (swap! jobs assoc uid {:regex regex 
+                                                         :input-ch task-input-ch})
+                                cat (-> (zipmap (map :onyx/name catalog) catalog) 
+                                        (assoc-in [:filter-by-regex :timeline/regex] regex)
+                                        (assoc-in [:in-take :sente/uid] uid)    
+                                        (assoc-in [:wrap-sente-user-info :sente/uid] uid)
+                                        vals)
+                                job-id (onyx.api/submit-job (:conn onyx-connection)
+                                                            {:catalog cat :workflow client-workflow})]
+                            (println "Submitted job " job-id))) 
+                 (recur)))
+      (assoc component :command-ch cmd-ch)))
+  (stop [component]
+    (println "Stopping Onyx Scheduler")
+    ; TODO: :done all the channels in the jobs atom
+    ;(>!! (:timeline/input-ch (:peer (:onyx conf))) :done)
+    component))
+
+(defn new-onyx-scheduler [conf] (map->OnyxScheduler {:conf conf}))
+

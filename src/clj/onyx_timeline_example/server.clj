@@ -21,6 +21,8 @@
 ; or maybe put the sente channel in here too.
 (def input-ch (chan (sliding-buffer capacity)))
 (def output-ch (chan (sliding-buffer capacity)))
+(def onyx-command-ch (chan))
+
 (def conf {:port                     8888
            :onyx {:coord {:hornetq/mode :vm ;; Run HornetQ inside the VM for convenience
                           :hornetq/server? true
@@ -33,10 +35,12 @@
                   :peer {:hornetq/mode :vm
                          :zookeeper/address "127.0.0.1:2185"
                          :onyx/id onyx-id
+                         :scheduler/command-ch onyx-command-ch
+                         :scheduler/jobs (atom {})
                          :timeline/input-ch input-ch
                          :timeline/input-ch-mult (mult input-ch)
                          :timeline/output-ch output-ch}
-                  :num-peers 1 
+                  :num-peers 100 
                   :coordinator-type :memory}})
 
 (defn get-system [conf]
@@ -47,10 +51,10 @@
    :twitter (twitter/new-tweet-stream conf)
    :onyx-connection (component/using (onyx/new-onyx-connection conf) [:twitter])
    :onyx-peers (component/using (onyx/new-onyx-peers conf) [:onyx-connection])
-   :onyx-job (component/using (onyx/new-onyx-job conf) [:onyx-connection])
-   ;:onyx-job2 (component/using (onyx/new-onyx-job conf) [:onyx-connection])
+   :onyx-scheduler (component/using (onyx/new-onyx-scheduler conf) [:onyx-connection])
+   ;:onyx-job (component/using (onyx/new-onyx-job conf) [:onyx-connection])
    :comm-channels (comm/new-sente-communicator-channels)
-   :comm (component/using (comm/new-sente-communicator) {:channels :comm-channels})
+   :comm (component/using (comm/new-sente-communicator) {:channels :comm-channels :onyx-scheduler :onyx-scheduler})
    :http (component/using (http/new-http-server conf) [:comm])
    :switchboard (component/using (sw/new-switchboard conf) [:comm-channels])))
 
@@ -80,4 +84,3 @@
 (defn -main [& args]
   ;(log/info "Application started, PID" (pid/current))
   (alter-var-root #'system component/start))
-
