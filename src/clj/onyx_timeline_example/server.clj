@@ -1,5 +1,5 @@
 (ns onyx-timeline-example.server
-  (:require [clojure.core.async :refer [chan sliding-buffer]]
+  (:require [clojure.core.async :refer [mult chan sliding-buffer]]
             [clojure.tools.namespace.repl :refer [refresh]]
             [clojure.edn :as edn]
             [clojure.tools.logging :as log]
@@ -16,13 +16,12 @@
 
 (def capacity 1000)
 
+; There should be a conf component!
+; can probably get rid of communicator channels then.
+; or maybe put the sente channel in here too.
 (def input-ch (chan (sliding-buffer capacity)))
-
 (def output-ch (chan (sliding-buffer capacity)))
-
-(def conf {:tw-check-interval-sec    10
-           :tw-restart-wait          60
-           :port                     8888
+(def conf {:port                     8888
            :onyx {:coord {:hornetq/mode :vm ;; Run HornetQ inside the VM for convenience
                           :hornetq/server? true
                           :hornetq.server/type :vm
@@ -35,8 +34,9 @@
                          :zookeeper/address "127.0.0.1:2185"
                          :onyx/id onyx-id
                          :timeline/input-ch input-ch
+                         :timeline/input-ch-mult (mult input-ch)
                          :timeline/output-ch output-ch}
-                  :num-peers 8
+                  :num-peers 1 
                   :coordinator-type :memory}})
 
 (defn get-system [conf]
@@ -48,8 +48,9 @@
    :onyx-connection (component/using (onyx/new-onyx-connection conf) [:twitter])
    :onyx-peers (component/using (onyx/new-onyx-peers conf) [:onyx-connection])
    :onyx-job (component/using (onyx/new-onyx-job conf) [:onyx-connection])
-   :comm-channels (comm/new-communicator-channels)
-   :comm (component/using (comm/new-communicator) {:channels :comm-channels})
+   ;:onyx-job2 (component/using (onyx/new-onyx-job conf) [:onyx-connection])
+   :comm-channels (comm/new-sente-communicator-channels)
+   :comm (component/using (comm/new-sente-communicator) {:channels :comm-channels})
    :http (component/using (http/new-http-server conf) [:comm])
    :switchboard (component/using (sw/new-switchboard conf) [:comm-channels])))
 
