@@ -12,33 +12,33 @@
 ;; serialization format for client<->server comm
 (def packer (sente-transit/get-flexi-packer :json))
 
-(defrecord Communicator [channels chsk-router]
+(defrecord SenteCommunicator [channels chsk-router]
   component/Lifecycle
   (start [component]
-    (println "Starting Communicator Component")
+    (println "Starting Sente Communicator Component")
     (let [{:keys [ch-recv send-fn ajax-post-fn ajax-get-or-ws-handshake-fn connected-uids]}
           (sente/make-channel-socket! {:packer packer :user-id-fn ws/user-id-fn})
           event-handler identity        ; FIXME 
           chsk-router (sente/start-chsk-router! ch-recv event-handler)]
-      (ws/send-loop (:timeline channels) (ws/send-stream connected-uids send-fn))
+      (ws/send-loop (:timeline/sente-ch channels) (ws/send-stream connected-uids send-fn))
       (assoc component :ajax-post-fn ajax-post-fn
              :ajax-get-or-ws-handshake-fn ajax-get-or-ws-handshake-fn
              :chsk-router chsk-router)))
   (stop [component]
-    (println "Stopping Communicator Component")
+    (println "Stopping Sente Communicator Component")
     (chsk-router) ;; stops router loop
     (assoc component :chsk-router nil)))
 
-(defn new-communicator [] (map->Communicator {}))
+(defn new-sente-communicator [] (map->SenteCommunicator {}))
 
-(defrecord Communicator-Channels []
+(defrecord SenteCommunicator-Channels []
   component/Lifecycle
   (start [component]
     (println "Starting Communicator Channels Component")
-    (assoc component :timeline (chan)))
+    (assoc component :timeline/sente-ch (chan)))
   (stop [component]
     (println "Stopping Communicator Channels Component")
-    (assoc component :timeline nil)))
+    (assoc component :timeline/sente-ch nil)))
 
-(defn new-communicator-channels [] (map->Communicator-Channels {}))
+(defn new-sente-communicator-channels [] (map->SenteCommunicator-Channels {}))
 
