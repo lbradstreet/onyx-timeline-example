@@ -41,7 +41,7 @@
 
 (defn segment->msg [segment]
   (cond (= segment :done) [:onyx/job :done] 
-        (and (:tweet segment) (:sente/user segment)) [:tweet/new-user-filter segment] 
+        (and (:tweet segment) (:sente/uid segment)) [:tweet/new-user-filter segment] 
         (contains? segment :tweet) [:tweet/new segment] 
         (contains? segment :top-words) [:agg/top-word-count (:top-words segment)] 
         (contains? segment :top-hashtags) [:agg/top-hashtag-count (:top-hashtags segment)]))
@@ -49,8 +49,7 @@
 (defn send-stream [uids chsk-send!]
   "deliver percolation matches to interested clients"
   (fn [segment]
-    ;(println "Seg " segment)
-    (let [user (:sente/user segment)] 
+    (let [user (:sente/uid segment)] 
       (doseq [uid (if (or (nil? user) (= :any user)) 
                     (:any @uids)     
                     (list user))]

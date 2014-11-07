@@ -73,7 +73,7 @@
       (extensions/close-resource queue session))))
 
 (defn wrap-sente-user-info [user segment]
-  (assoc segment :sente/user user))
+  (assoc segment :sente/uid user))
 
 (def batch-size 50)
 
