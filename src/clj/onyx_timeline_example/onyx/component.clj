@@ -302,15 +302,16 @@
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
     (println "Starting Onyx Scheduler")
-    (let [cmd-ch (:scheduler/command-ch (:peer (:onyx conf)))]
+    (let [peer-conf (:peer (:onyx conf))
+          cmd-ch (:scheduler/command-ch peer-conf)]
       (go-loop []
                (let [msg (<!! cmd-ch)]
                  (match msg
                         [:start-filter-job [regex uid]]
                         (do
-                          (let [timeline-tap (a/tap (-> conf :onyx :peer :timeline/input-ch-mult) (chan))
+                          (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
                                 task-input-ch (pipe-input-take timeline-tap 1000)
-                                jobs (-> conf :onyx :peer :scheduler/jobs)
+                                jobs (:scheduler/jobs peer-conf)
                                 ; Add a comment here about how an atom wouldn't be necessary 
                                 ; if we use a queue where we pass in serializable parameters
                                 ; via the task-opts.
@@ -322,7 +323,12 @@
                                         (assoc-in [:wrap-sente-user-info :sente/uid] uid)
                                         vals)
                                 job-id (onyx.api/submit-job (:conn onyx-connection)
-                                                            {:catalog cat :workflow client-workflow})]
+                                                            {:catalog cat :workflow client-workflow})
+                                onyx-peers (-> (new-onyx-peers conf)
+                                               (assoc :onyx-connection onyx-connection)
+                                               component/start)]
+                            (future (do @(onyx.api/await-job-completion (:conn onyx-connection) job-id)
+                                        #_(component/stop onyx-peers)))
                             (println "Submitted job " job-id)))) 
                  (recur)))
       (assoc component :command-ch cmd-ch)))

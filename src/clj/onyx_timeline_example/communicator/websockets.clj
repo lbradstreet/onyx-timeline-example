@@ -52,8 +52,8 @@
     ;(println "Seg " segment)
     (let [user (:sente/user segment)] 
       (doseq [uid (if (or (nil? user) (= :any user)) 
-                  (:any @uids)     
-                  (list user))]
+                    (:any @uids)     
+                    (list user))]
       (when-let [msg (segment->msg segment)]
         ;(println "sending " uid " " msg)
         (chsk-send! uid msg))))))
