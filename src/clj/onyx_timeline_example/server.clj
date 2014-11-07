@@ -23,7 +23,7 @@
 (def output-ch (chan (sliding-buffer capacity)))
 (def onyx-command-ch (chan))
 
-(def conf {:port                     8888
+(def conf {:port 8888
            :onyx {:coord {:hornetq/mode :vm ;; Run HornetQ inside the VM for convenience
                           :hornetq/server? true
                           :hornetq.server/type :vm

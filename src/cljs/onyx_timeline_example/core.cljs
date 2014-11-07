@@ -156,35 +156,35 @@
   (did-mount [_]
              (.bind (.-events js/twttr) "rendered" (fn [widget] (println "Created widget " #_(.-id widget)))))
   (render-state [_ {:keys [regex-str]}]
-                (d/div
-                  {:class "grids-examples"}
-                  (b/toolbar {} 
-                             (i/input {:type "text" 
-                                       :label "Custom Filter Regex"
-                                       :on-change (fn [e] (om/set-state! owner :regex-str (.. e -target -value)))})
-                             (b/button {:on-click
-                                        (fn [e] (chsk-send! [:job/start {:regex-str regex-str}] ; event
-                                                            8000 ; timeout
-                                                            ;; Optional callback:
-                                                            (fn [edn-reply]
-                                                              ; Checks for :chsk/closed, :chsk/timeout, :chsk/error
-                                                              (if (sente/cb-success? edn-reply) 
-                                                                (println "Successful sente reply " edn-reply)
-                                                                (println "Error! " edn-reply)))))}
-                                       "Send filter job"))
-                  (g/grid {}
-                          (g/row {:class "show-grid"}
-                                 (g/col {:xs 6 :md 8}
-                                        (om/build timeline 
-                                                  (:custom-filter-timeline data) 
-                                                  {:opts {:timeline-ch (:custom-filter (om/get-shared owner :comms))} }))
-                                 (g/col {:xs 6 :md 8}
-                                        (om/build timeline 
-                                                  (:timeline data) 
-                                                  {:opts {:timeline-ch (:timeline (om/get-shared owner :comms))} }))
-                                 (g/col {:xs 4 :md 4}
-                                        (om/build top-word-counts (:top-word-counts data) {})
-                                        (om/build top-hashtag-counts (:top-hashtag-counts data) {})))))))
+                (g/grid {}
+                        (g/row {:class "show-grid grids-examples"}
+                               (g/col {:xs 6 :md 8}
+                                      (b/toolbar {} 
+                                                 (i/input {:type "text" 
+                                                           :label "Custom Filter Regex"
+                                                           :on-change (fn [e] (om/set-state! owner :regex-str (.. e -target -value)))})
+                                                 (b/button {:on-click
+                                                            (fn [e] (chsk-send! [:job/start {:regex-str regex-str}] ; event
+                                                                               8000 ; timeout
+                                                                               ;; Optional callback:
+                                                                               (fn [edn-reply]
+                                        ; Checks for :chsk/closed, :chsk/timeout, :chsk/error
+                                                                                 (if (sente/cb-success? edn-reply) 
+                                                                                   (println "Successful sente reply " edn-reply)
+                                                                                   (println "Error! " edn-reply)))))}
+                                                           "Send filter job"))))
+                        (g/row {:class "show-grid"}
+                               (g/col {:xs 6 :md 8}
+                                      (om/build timeline 
+                                                (:custom-filter-timeline data) 
+                                                {:opts {:timeline-ch (:custom-filter (om/get-shared owner :comms))} }))
+                               (g/col {:xs 6 :md 8}
+                                      (om/build timeline 
+                                                (:timeline data) 
+                                                {:opts {:timeline-ch (:timeline (om/get-shared owner :comms))} }))
+                               (g/col {:xs 4 :md 4}
+                                      (om/build top-word-counts (:top-word-counts data) {})
+                                      (om/build top-hashtag-counts (:top-hashtag-counts data) {}))))))
 
 (defn main []
   (om/root app 
