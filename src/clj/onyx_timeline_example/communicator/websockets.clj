@@ -23,16 +23,14 @@
 (defn make-handler [command-ch]
   (fn [{:keys [event ?reply-fn] :as ev-msg}]
     (match event
-           [:job/start params]
-           (start-job-handler ?reply-fn 
-                              command-ch 
-                              params 
-                              (re-pattern (:regex-str params))
-                              (ev->cookie ev-msg))
-           [:chsk/uidport-close] 
-           (println "Client " (ev->cookie ev-msg) " closed page. Can flush job.")
-           :else
-           (println "Got event " event))))
+           [:job/start params] (start-job-handler ?reply-fn 
+                                                  command-ch 
+                                                  params 
+                                                  (re-pattern (:regex-str params))
+                                                  (ev->cookie ev-msg))
+           [:chsk/uidport-close] (println "Client " (ev->cookie ev-msg) 
+                                          " closed page. Can flush job.")
+           :else (println "Got event " event))))
 
 (defn send-loop [channel f]
   "run loop, call f with message on channel"
@@ -42,16 +40,11 @@
            (recur)))
 
 (defn segment->msg [segment]
-  (cond (= segment :done)
-        [:onyx/job :done]
-        (and (:tweet segment) (:sente/user segment))
-        [:tweet/new-user-filter segment]
-        (contains? segment :tweet)
-        [:tweet/new segment]
-        (contains? segment :top-words)
-        [:agg/top-word-count (:top-words segment)]
-        (contains? segment :top-hashtags)
-        [:agg/top-hashtag-count (:top-hashtags segment)]))
+  (cond (= segment :done) [:onyx/job :done] 
+        (and (:tweet segment) (:sente/user segment)) [:tweet/new-user-filter segment] 
+        (contains? segment :tweet) [:tweet/new segment] 
+        (contains? segment :top-words) [:agg/top-word-count (:top-words segment)] 
+        (contains? segment :top-hashtags) [:agg/top-hashtag-count (:top-hashtags segment)]))
 
 (defn send-stream [uids chsk-send!]
   "deliver percolation matches to interested clients"
