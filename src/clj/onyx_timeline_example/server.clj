@@ -82,5 +82,4 @@
 ;(reset)
 
 (defn -main [& args]
-  ;(log/info "Application started, PID" (pid/current))
   (alter-var-root #'system component/start))

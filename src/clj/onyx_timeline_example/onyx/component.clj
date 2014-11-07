@@ -51,6 +51,9 @@
        (into {})))
 
 (defn log-and-purge-words [{:keys [onyx.core/queue] :as event}]
+  ; Not sure if we really want to destroy the full word map here
+  ; some kind of rolling counts would probably be best, since
+  ; we do want to show trending words
   (let [result (swap! (:timeline/word-count-state event) top-words)
         compressed-state (fressian/write {:top-words result})]
     (let [session (extensions/create-tx-session queue)]
@@ -183,9 +186,8 @@
   component/Lifecycle
   (start [component]
     (println "Starting Onyx Coordinator")
-    (let [conn (onyx.api/connect
-                (:coordinator-type (:onyx conf))
-                (:coord (:onyx conf)))]
+    (let [conn (onyx.api/connect (:coordinator-type (:onyx conf))
+                                 (:coord (:onyx conf)))]
       (assoc component :conn conn)))
   (stop [component]
     (println "Stopping Onyx Coordinator")
@@ -233,11 +235,13 @@
 
 (defmethod l-ext/inject-lifecycle-resources :split-into-words
   [_ {:keys [onyx.core/task-map]}]
+    (println "Split into words " task-map)
   {:onyx.core/params [(:timeline.words/min-chars task-map)]})
 
 (defmethod l-ext/inject-lifecycle-resources :word-count
   [_ {:keys [onyx.core/queue onyx.core/task-map] :as event}]
   (let [local-state (atom {})]
+    (println "Started inject lifecycle. " task-map)
     {:onyx.core/params [local-state (:timeline.words/exclude-hashtags? task-map)]
      :timeline/word-count-state local-state}))
 
@@ -257,7 +261,10 @@
   ; to send a :done sentinel to the job without stopping any other jobs 
   ; that depend on the timeline channel. Therefore we pipe the tapped
   ; timeline in, and only send the :done to the in chan.
-  (let [in (get-in (-> peer-opts :scheduler/jobs deref) [(:sente/uid task-map) :input-ch])]
+  (let [in (-> peer-opts 
+               :scheduler/jobs 
+               deref
+               (get-in [(:sente/uid task-map) :input-ch]))]
     {:core-async/in-chan in}))
 
 (defrecord OnyxJob [conf]
@@ -327,9 +334,10 @@
                                 onyx-peers (-> (new-onyx-peers conf)
                                                (assoc :onyx-connection onyx-connection)
                                                component/start)]
+                            (println "Submitted job " job-id)
                             (future (do @(onyx.api/await-job-completion (:conn onyx-connection) job-id)
-                                        #_(component/stop onyx-peers)))
-                            (println "Submitted job " job-id)))) 
+                                        (println "Job done")
+                                        (component/stop onyx-peers)))))) 
                  (recur)))
       (assoc component :command-ch cmd-ch)))
   (stop [component]

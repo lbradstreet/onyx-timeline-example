@@ -28,8 +28,7 @@
                                                   params 
                                                   (re-pattern (:regex-str params))
                                                   (ev->cookie ev-msg))
-           [:chsk/uidport-close] (println "Client " (ev->cookie ev-msg) 
-                                          " closed page. Can flush job.")
+           [:chsk/uidport-close] (println "User " (ev->cookie ev-msg) " closed page. Can flush job?")
            :else (println "Got event " event))))
 
 (defn send-loop [channel f]
