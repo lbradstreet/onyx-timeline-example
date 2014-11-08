@@ -33,21 +33,22 @@
        (map (fn [word] {:word word}))))
 
 
-(defn update-trends [trends token period]
-  (let [ts (conj (:tokens trends) token)
-        counts (:counts trends)] 
+(defn update-trends [{:keys [tokens counts]} token period]
+  (let [ts (conj tokens token)
+        updated-count (inc (counts token 0))] 
     (if (> (count ts) period)
       (let [removed-token (first ts)
             removed-count (dec (counts removed-token))] 
         {:tokens (subvec ts 1) 
-         :counts (if (zero? removed-count)
-                   (dissoc counts removed-token)
-                   (assoc counts removed-token removed-count))})
+         :counts (assoc (if (zero? removed-count)
+                          (dissoc counts removed-token)
+                          (assoc counts removed-token removed-count))
+                        token
+                        updated-count)})
       {:tokens ts
-       :counts (assoc counts token (inc (counts token 0)))})))
+       :counts (assoc counts token updated-count)})))
 
 (def rolling-total-period 10000)
-
 
 (defn word-count [local-state exclude-hashtags? {:keys [word] :as segment}]
   (if (and exclude-hashtags? (.startsWith word "#"))
@@ -318,17 +319,20 @@
 
 (def num-new-peers 10)
 
-(defn start-job! [onyx-connection peer-conf job-key input-ch catalog workflow]
+(defn start-job! [onyx-connection peer-conf job-info catalog workflow]
   (let [jobs (:scheduler/jobs peer-conf)
         job-id (onyx.api/submit-job (:conn onyx-connection)
                                     {:catalog catalog :workflow workflow})
+        ; the common timeline will be hogging all of the peers
+        ; so we need to stand up new peers which will be allocated to the new job
         onyx-peers (-> (new-onyx-peers peer-conf num-new-peers)
                        (assoc :onyx-connection onyx-connection)
                        component/start)]
-    (swap! jobs assoc job-key {:input-ch input-ch})
+    (swap! jobs assoc (:uid job-info) job-info)
+    (>!! (:timeline/output-ch peer-conf) {:onyx.job/started (:regex job-info)})
     (future (do @(onyx.api/await-job-completion (:conn onyx-connection) (str job-id))
                 (println "Job done.")
-                (swap! jobs dissoc job-key)
+                (swap! jobs dissoc (:uid job-info))
                 (component/stop onyx-peers)))))
 
 (defrecord OnyxScheduler [conf]
@@ -340,6 +344,8 @@
       (go-loop []
                (let [msg (<!! cmd-ch)]
                  (match msg
+                        [:list-jobs]
+                        (>!! (:timeline/output-ch peer-conf) {:onyx.job/list (map :regex (vals @(:scheduler/jobs peer-conf)))})
                         [:start-filter-job [regex uid]]
                         (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
                               task-input-ch (pipe-input-take timeline-tap 1000)
@@ -351,7 +357,11 @@
                                       (assoc-in [:filter-by-regex :timeline/regex] regex)
                                       (assoc-in [:wrap-sente-user-info :sente/uid] uid)
                                       vals)]
-                          (start-job! onyx-connection peer-conf uid task-input-ch cat client-workflow))) 
+                          (start-job! onyx-connection 
+                                      peer-conf 
+                                      {:input-ch task-input-ch :regex regex :uid uid}
+                                      cat 
+                                      client-workflow))) 
                  (recur)))
       (assoc component :command-ch cmd-ch)))
   (stop [component]
