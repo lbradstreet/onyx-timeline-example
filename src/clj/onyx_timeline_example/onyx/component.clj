@@ -32,14 +32,31 @@
        (filter (fn [word] (> (count word) min-chars)))
        (map (fn [word] {:word word}))))
 
+
+(defn update-trends [trends token period]
+  (let [ts (conj (:tokens trends) token)
+        counts (:counts trends)] 
+    (if (> (count ts) period)
+      (let [removed-token (first ts)
+            removed-count (dec (counts removed-token))] 
+        {:tokens (subvec ts 1) 
+         :counts (if (zero? removed-count)
+                   (dissoc counts removed-token)
+                   (assoc counts removed-token removed-count))})
+      {:tokens ts
+       :counts (assoc counts token (inc (counts token 0)))})))
+
+(def rolling-total-period 10000)
+
+
 (defn word-count [local-state exclude-hashtags? {:keys [word] :as segment}]
   (if (and exclude-hashtags? (.startsWith word "#"))
     []
-    (do (swap! local-state (fn [state] (assoc state word (inc (get state word 0)))))
+    (do (swap! local-state update-trends word rolling-total-period)
         [])))
 
 (defn hashtag-count [local-state {:keys [hashtag] :as segment}]
-  (swap! local-state (fn [state] (assoc state hashtag (inc (get state hashtag 0)))))
+  (swap! local-state update-trends hashtag rolling-total-period)
   [])
 
 (defn top-words [m]
@@ -51,10 +68,7 @@
        (into {})))
 
 (defn log-and-purge-words [{:keys [onyx.core/queue] :as event}]
-  ; Not sure if we really want to destroy the full word map here
-  ; some kind of rolling counts would probably be best, since
-  ; we do want to show trending words
-  (let [result (swap! (:timeline/word-count-state event) top-words)
+  (let [result (top-words (:counts @(:timeline/word-count-state event)))
         compressed-state (fressian/write {:top-words result})]
     (let [session (extensions/create-tx-session queue)]
       (doseq [queue-name (:onyx.core/egress-queues event)]
@@ -65,15 +79,15 @@
       (extensions/close-resource queue session))))
 
 (defn log-and-purge-hashtags [{:keys [onyx.core/queue] :as event}]
-  (let [result (swap! (:timeline/hashtag-count-state event) top-words)
-        compressed-state (fressian/write {:top-hashtags result})]
-    (let [session (extensions/create-tx-session queue)]
-      (doseq [queue-name (:onyx.core/egress-queues event)]
-        (let [producer (extensions/create-producer queue session queue-name)]
-          (extensions/produce-message queue producer session compressed-state)
-          (extensions/close-resource queue producer)))
+  (let [result (top-words (:counts @(:timeline/hashtag-count-state event)))
+        compressed-state (fressian/write {:top-hashtags result})
+        session (extensions/create-tx-session queue)]
+    (doseq [queue-name (:onyx.core/egress-queues event)]
+      (let [producer (extensions/create-producer queue session queue-name)]
+        (extensions/produce-message queue producer session compressed-state)
+        (extensions/close-resource queue producer)))
       (extensions/commit-tx queue session)
-      (extensions/close-resource queue session))))
+      (extensions/close-resource queue session)))
 
 (defn wrap-sente-user-info [user segment]
   (assoc segment :sente/uid user))
@@ -239,13 +253,13 @@
 
 (defmethod l-ext/inject-lifecycle-resources :word-count
   [_ {:keys [onyx.core/queue onyx.core/task-map] :as event}]
-  (let [local-state (atom {})]
+  (let [local-state (atom {:tokens [] :counts {}})]
     {:onyx.core/params [local-state (:timeline.words/exclude-hashtags? task-map)]
      :timeline/word-count-state local-state}))
 
 (defmethod l-ext/inject-lifecycle-resources :hashtag-count
   [_ {:keys [onyx.core/queue] :as event}]
-  (let [local-state (atom {})]
+  (let [local-state (atom {:tokens [] :counts {}})]
     {:onyx.core/params [local-state]
      :timeline/hashtag-count-state local-state}))
 
