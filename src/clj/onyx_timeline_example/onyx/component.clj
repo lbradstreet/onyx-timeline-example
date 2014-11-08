@@ -335,7 +335,7 @@
                                                (assoc :onyx-connection onyx-connection)
                                                component/start)]
                             (println "Submitted job " job-id)
-                            (future (do @(onyx.api/await-job-completion (:conn onyx-connection) job-id)
+                            (future (do @(onyx.api/await-job-completion (:conn onyx-connection) (str job-id))
                                         (println "Job done")
                                         (component/stop onyx-peers)))))) 
                  (recur)))
