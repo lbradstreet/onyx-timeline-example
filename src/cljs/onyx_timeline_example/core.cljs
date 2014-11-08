@@ -34,16 +34,22 @@
   (def chsk-send! send-fn) ; ChannelSocket's send API fn
   (def chsk-state app-state))  ; Watchable, read-only atom
 
+(defn handle-payload [[msg-type contents]]
+  (match [msg-type contents]
+         [:onyx.job/started msg] (println "Onyx job started " msg)
+         [:onyx.job/list msg] (println "Onyx job list " msg)
+         [:onyx.job/done nil] (println "Onyx job done")
+         [:tweet/new tweet] (put! timeline-chan tweet)
+         [:tweet/new-user-filter tweet] (put! custom-filter-chan tweet)
+         [:agg/top-word-count counts] (put! words-agg-chan counts)
+         [:agg/top-hashtag-count counts] (put! hashtags-agg-chan counts)
+         :else (println "Couldn't match payload " payload)))
+
 (defn- event-handler [{:keys [event]}]
+  (println "got event " event)
   (match event
          [:chsk/state new-state] (print "Chsk state change:" new-state)
-         [:chsk/recv payload] (let [[msg-type msg] payload]
-                                (match [msg-type msg]
-                                       [:onyx/job msg] (println "Onyx job " msg)
-                                       [:tweet/new tweet] (put! timeline-chan tweet)
-                                       [:tweet/new-user-filter tweet] (put! custom-filter-chan tweet)
-                                       [:agg/top-word-count counts] (put! words-agg-chan counts)
-                                       [:agg/top-hashtag-count counts] (put! hashtags-agg-chan counts)))
+         [:chsk/recv payload] (handle-payload payload)
          :else (print "Unmatched event: %s" event)))
 
 (defonce chsk-router (sente/start-chsk-router! ch-chsk event-handler))

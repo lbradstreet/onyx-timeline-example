@@ -48,6 +48,7 @@
       {:tokens ts
        :counts (assoc counts token updated-count)})))
 
+; move to conf
 (def rolling-total-period 10000)
 
 (defn word-count [local-state exclude-hashtags? {:keys [word] :as segment}]

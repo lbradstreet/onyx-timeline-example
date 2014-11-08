@@ -41,10 +41,22 @@
 (def top-words (atom {}))
 (def top-hashtags (atom {}))
 
+(comment
+  (let [x {:a 1 :b 1}]
+    (match [x]
+           [{:a _ :b 2}] :a0
+           [{:a 1 :b 1}] :a1
+           [{:c 3 :d _ :e 4}] :a2
+           :else nil)))
+
+; TODO use match
 (defn segment->msg [segment]
-  (cond (= segment :done) [:onyx/job :done] 
+  (cond (= segment :done) [:onyx.job/done] 
+        (contains? segment :onyx.job/started) [:onyx.job/started (str (second (:onyx.job/started segment)))]
+        (contains? segment :onyx.job/list) [:onyx.job/list (:onyx.job/list segment)]
         (and (:tweet segment) (:sente/uid segment)) [:tweet/new-user-filter segment] 
         (contains? segment :tweet) [:tweet/new segment] 
+        ; TODO: only select top words before sending to client
         (contains? segment :top-words) [:agg/top-word-count (swap! top-words merge (:top-words segment) )] 
         (contains? segment :top-hashtags) [:agg/top-hashtag-count (swap! top-hashtags merge (:top-hashtags segment))]))
 
@@ -52,9 +64,9 @@
   "deliver percolation matches to interested clients"
   (fn [segment]
     (let [user (:sente/uid segment)] 
-      (doseq [uid (if (or (nil? user) (= :any user)) 
-                    (:any @uids)     
-                    (list user))]
+      (doseq [uid (cond (nil? user) (:any @uids) 
+                        (= :any user) (:any @uids)      
+                        :else (list user))]
       (when-let [msg (segment->msg segment)]
-        ;(println "sending " uid " " msg)
+        (println "sending " uid " " msg)
         (chsk-send! uid msg))))))
