@@ -271,9 +271,8 @@
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
     (println "Starting Onyx Job")
-    (let [job-id (onyx.api/submit-job
-                  (:conn onyx-connection)
-                  {:catalog catalog :workflow workflow})]
+    (let [job-id (onyx.api/submit-job (:conn onyx-connection)
+                                      {:catalog catalog :workflow workflow})]
       (assoc component :job-id job-id)))
   (stop [component]
     (println "Stopping Onyx Job")
@@ -305,6 +304,17 @@
    [:filter-by-regex :wrap-sente-user-info]
    [:wrap-sente-user-info :out]])
 
+(defn start-job! [onyx-connection jobs conf job-key input-ch catalog workflow]
+  (let [job-id (onyx.api/submit-job (:conn onyx-connection)
+                                    {:catalog catalog :workflow workflow})
+        onyx-peers (-> (new-onyx-peers conf)
+                       (assoc :onyx-connection onyx-connection)
+                       component/start)]
+    (swap! jobs assoc job-key {:input-ch input-ch})
+    (future (do @(onyx.api/await-job-completion (:conn onyx-connection) (str job-id))
+                (swap! jobs dissoc job-key)
+                (component/stop onyx-peers)))))
+
 (defrecord OnyxScheduler [conf]
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
@@ -315,36 +325,24 @@
                (let [msg (<!! cmd-ch)]
                  (match msg
                         [:start-filter-job [regex uid]]
-                        (do
-                          (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
-                                task-input-ch (pipe-input-take timeline-tap 1000)
-                                jobs (:scheduler/jobs peer-conf)
-                                ; Add a comment here about how an atom wouldn't be necessary 
-                                ; if we use a queue where we pass in serializable parameters
-                                ; via the task-opts.
-                                _ (swap! jobs assoc uid {:regex regex 
-                                                         :input-ch task-input-ch})
-                                cat (-> (zipmap (map :onyx/name catalog) catalog) 
-                                        (assoc-in [:filter-by-regex :timeline/regex] regex)
-                                        (assoc-in [:in-take :sente/uid] uid)    
-                                        (assoc-in [:wrap-sente-user-info :sente/uid] uid)
-                                        vals)
-                                job-id (onyx.api/submit-job (:conn onyx-connection)
-                                                            {:catalog cat :workflow client-workflow})
-                                onyx-peers (-> (new-onyx-peers conf)
-                                               (assoc :onyx-connection onyx-connection)
-                                               component/start)]
-                            (println "Submitted job " job-id)
-                            (future (do @(onyx.api/await-job-completion (:conn onyx-connection) job-id)
-                                        (println "Job done")
-                                        (component/stop onyx-peers)))))) 
+                        (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
+                              task-input-ch (pipe-input-take timeline-tap 1000)
+                              jobs (:scheduler/jobs peer-conf)
+                              ; Add a comment here about how an atom wouldn't be necessary 
+                              ; if we use a queue where we pass in serializable parameters
+                              ; via the task-opts.
+                              cat (-> (zipmap (map :onyx/name catalog) catalog) 
+                                      (assoc-in [:in-take :sente/uid] uid)    
+                                      (assoc-in [:filter-by-regex :timeline/regex] regex)
+                                      (assoc-in [:wrap-sente-user-info :sente/uid] uid)
+                                      vals)]
+                          (start-job! onyx-connection jobs conf task-input-ch cat client-workflow))) 
                  (recur)))
       (assoc component :command-ch cmd-ch)))
   (stop [component]
     (println "Stopping Onyx Scheduler")
-    ; TODO: :done all the channels in the jobs atom
-    ;(>!! (:timeline/input-ch (:peer (:onyx conf))) :done)
+    (doseq [ch (map :input-ch (vals @(:scheduler/jobs (:peer (:onyx conf)))))]
+      (>!! ch :done))
     component))
 
 (defn new-onyx-scheduler [conf] (map->OnyxScheduler {:conf conf}))
-
