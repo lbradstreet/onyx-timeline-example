@@ -197,13 +197,13 @@
 
 (defn new-onyx-connection [conf] (map->OnyxConnection {:conf conf}))
 
-(defrecord OnyxPeers [conf]
+(defrecord OnyxPeers [peer-conf n]
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
     (println "Starting Onyx Peers")
     (let [v-peers (onyx.api/start-peers (:conn onyx-connection)
-                                        (:num-peers (:onyx conf))
-                                        (:peer (:onyx conf)))]
+                                        n 
+                                        peer-conf)]
       (assoc component :v-peers v-peers)))
   (stop [component]
     (println "Stopping Onyx Peers")
@@ -212,7 +212,7 @@
         (shutdown-fn)))
     component))
 
-(defn new-onyx-peers [conf] (map->OnyxPeers {:conf conf}))
+(defn new-onyx-peers [peer-conf n] (map->OnyxPeers {:peer-conf peer-conf :n n}))
 
 (defmethod l-ext/inject-lifecycle-resources :in
   [_ {:keys [onyx.core/peer-opts]}]
@@ -235,13 +235,11 @@
 
 (defmethod l-ext/inject-lifecycle-resources :split-into-words
   [_ {:keys [onyx.core/task-map]}]
-    (println "Split into words " task-map)
   {:onyx.core/params [(:timeline.words/min-chars task-map)]})
 
 (defmethod l-ext/inject-lifecycle-resources :word-count
   [_ {:keys [onyx.core/queue onyx.core/task-map] :as event}]
   (let [local-state (atom {})]
-    (println "Started inject lifecycle. " task-map)
     {:onyx.core/params [local-state (:timeline.words/exclude-hashtags? task-map)]
      :timeline/word-count-state local-state}))
 
@@ -304,14 +302,18 @@
    [:filter-by-regex :wrap-sente-user-info]
    [:wrap-sente-user-info :out]])
 
-(defn start-job! [onyx-connection jobs conf job-key input-ch catalog workflow]
-  (let [job-id (onyx.api/submit-job (:conn onyx-connection)
+(def num-new-peers 10)
+
+(defn start-job! [onyx-connection peer-conf job-key input-ch catalog workflow]
+  (let [jobs (:scheduler/jobs peer-conf)
+        job-id (onyx.api/submit-job (:conn onyx-connection)
                                     {:catalog catalog :workflow workflow})
-        onyx-peers (-> (new-onyx-peers conf)
+        onyx-peers (-> (new-onyx-peers peer-conf num-new-peers)
                        (assoc :onyx-connection onyx-connection)
                        component/start)]
     (swap! jobs assoc job-key {:input-ch input-ch})
     (future (do @(onyx.api/await-job-completion (:conn onyx-connection) (str job-id))
+                (println "Job done.")
                 (swap! jobs dissoc job-key)
                 (component/stop onyx-peers)))))
 
@@ -327,7 +329,6 @@
                         [:start-filter-job [regex uid]]
                         (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
                               task-input-ch (pipe-input-take timeline-tap 1000)
-                              jobs (:scheduler/jobs peer-conf)
                               ; Add a comment here about how an atom wouldn't be necessary 
                               ; if we use a queue where we pass in serializable parameters
                               ; via the task-opts.
@@ -336,7 +337,7 @@
                                       (assoc-in [:filter-by-regex :timeline/regex] regex)
                                       (assoc-in [:wrap-sente-user-info :sente/uid] uid)
                                       vals)]
-                          (start-job! onyx-connection jobs conf task-input-ch cat client-workflow))) 
+                          (start-job! onyx-connection peer-conf uid task-input-ch cat client-workflow))) 
                  (recur)))
       (assoc component :command-ch cmd-ch)))
   (stop [component]

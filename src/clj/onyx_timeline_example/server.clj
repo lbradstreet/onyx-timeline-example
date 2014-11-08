@@ -46,15 +46,16 @@
 (defn get-system [conf]
   "Create system by wiring individual components so that component/start
   will bring up the individual components in the correct order."
-  ;; Fix some of these keyword names.
   (component/system-map
    :twitter (twitter/new-tweet-stream conf)
    :onyx-connection (component/using (onyx/new-onyx-connection conf) [:twitter])
-   :onyx-peers (component/using (onyx/new-onyx-peers conf) [:onyx-connection])
+   :onyx-peers (component/using (onyx/new-onyx-peers (:peer (:onyx conf)) 
+                                                     (:num-peers (:onyx conf))) [:onyx-connection])
    :onyx-scheduler (component/using (onyx/new-onyx-scheduler conf) [:onyx-connection])
    :onyx-job (component/using (onyx/new-onyx-job conf) [:onyx-connection])
    :comm-channels (comm/new-sente-communicator-channels)
-   :comm (component/using (comm/new-sente-communicator) {:channels :comm-channels :onyx-scheduler :onyx-scheduler})
+   :comm (component/using (comm/new-sente-communicator) {:channels :comm-channels 
+                                                         :onyx-scheduler :onyx-scheduler})
    :http (component/using (http/new-http-server conf) [:comm])
    :switchboard (component/using (sw/new-switchboard conf) [:comm-channels])))
 
