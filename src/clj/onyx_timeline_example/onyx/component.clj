@@ -33,20 +33,22 @@
        (filter (fn [word] (> (count word) min-chars)))
        (map (fn [word] {:word word}))))
 
-(defn lower-text 
-  "Do not lower if any multibyte characters are in string.
-  Not sure why this messes up encoding in browser."
-  [s]
-  (if (= (count s)
-         (->> s 
-              (map (comp count #(.getBytes % "UTF-8") str))
-              (reduce +)))
-    (s/lower-case s)
-    s))
+; Something is messing up multibyte characters, but it's not this
+; Maybe regexes?
+; (defn lower-text 
+;   "Do not lower if any multibyte characters are in string.
+;   Not sure why this messes up encoding in browser."
+;   [s]
+;   (if (= (count s)
+;          (->> s 
+;               (map (comp count #(.getBytes % "UTF-8") str))
+;               (reduce +)))
+;     (s/lower-case s)
+;     s))
 
 (defn normalize-words [{:keys [word]}]
   {:word (-> word 
-             lower-text
+             s/lower-case
              (s/replace #"[,.:']$" ""))})
 
 (defn update-trends [{:keys [tokens counts]} token period]
@@ -343,27 +345,25 @@
    [:filter-by-regex :wrap-sente-user-info]
    [:wrap-sente-user-info :out]])
 
-(def num-new-peers 10)
-
 (defn start-job! [onyx-connection peer-conf job-info catalog workflow]
   (let [jobs (:scheduler/jobs peer-conf)
         job-id (onyx.api/submit-job (:conn onyx-connection)
                                     {:catalog catalog :workflow workflow})
         ; the common timeline will be hogging all of the peers
         ; so we need to stand up new peers which will be allocated to the new job
-        onyx-peers (-> (new-onyx-peers peer-conf num-new-peers)
+        onyx-peers (-> (new-onyx-peers peer-conf (:scheduler/num-peers-filter peer-conf))
                        (assoc :onyx-connection onyx-connection)
                        component/start)]
     (swap! jobs assoc (:uid job-info) job-info)
     (>!! (:timeline/output-ch peer-conf) {:onyx.job/started (:regex job-info)})
     (future (do @(onyx.api/await-job-completion (:conn onyx-connection) (str job-id))
-                (println "Job done.")
+                (>!! (:timeline/output-ch peer-conf) {:onyx.job/done (:regex job-info)})
                 (swap! jobs dissoc (:uid job-info))
                 (component/stop onyx-peers)))))
 
 (defn jobs->list [jobs]
   {:onyx.job/list (map (juxt (comp (partial take 5) str :uid) 
-                             :regex) 
+                             (comp str :regex)) 
                        (vals jobs))})
 
 (defrecord OnyxScheduler [conf]
@@ -377,22 +377,27 @@
                  (match msg
                         [:list-jobs]
                         (>!! (:timeline/output-ch peer-conf) (jobs->list @(:scheduler/jobs peer-conf)))
+
                         [:start-filter-job [regex uid]]
-                        (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
-                              task-input-ch (pipe-input-take timeline-tap 1000)
-                              ; Add a comment here about how an atom wouldn't be necessary 
-                              ; if we use a queue where we pass in serializable parameters
-                              ; via the task-opts.
-                              cat (-> (zipmap (map :onyx/name catalog) catalog) 
-                                      (assoc-in [:in-take :sente/uid] uid)    
-                                      (assoc-in [:filter-by-regex :timeline/regex] regex)
-                                      (assoc-in [:wrap-sente-user-info :sente/uid] uid)
-                                      vals)]
-                          (start-job! onyx-connection 
-                                      peer-conf 
-                                      {:input-ch task-input-ch :regex regex :uid uid}
-                                      cat 
-                                      client-workflow))) 
+                        (if (>= (count @(:scheduler/jobs peer-conf))
+                                (:scheduler/max-jobs peer-conf))
+                          (>!! (:timeline/output-ch peer-conf) 
+                               {:onyx.job/start-failed "Failed to start job as too many jobs are running"})
+                          (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
+                                task-input-ch (pipe-input-take timeline-tap 1000)
+                                ; Add a comment here about how an atom wouldn't be necessary 
+                                ; if we use a queue where we pass in serializable parameters
+                                ; via the task-opts.
+                                cat (-> (zipmap (map :onyx/name catalog) catalog) 
+                                        (assoc-in [:in-take :sente/uid] uid)    
+                                        (assoc-in [:filter-by-regex :timeline/regex] regex)
+                                        (assoc-in [:wrap-sente-user-info :sente/uid] uid)
+                                        vals)]
+                            (start-job! onyx-connection 
+                                        peer-conf 
+                                        {:input-ch task-input-ch :regex regex :uid uid}
+                                        cat 
+                                        client-workflow)))) 
                  (recur)))
       (assoc component :command-ch cmd-ch)))
   (stop [component]
