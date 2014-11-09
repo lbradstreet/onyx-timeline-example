@@ -38,11 +38,12 @@
 (defn make-handler [command-ch]
   (fn [{:keys [event ?reply-fn] :as ev-msg}]
     (match event
-           [:job/start params] (start-job-handler ?reply-fn 
-                                                  command-ch 
-                                                  params 
-                                                  (re-pattern (:regex-str params))
-                                                  (ev->cookie ev-msg))
+           [:onyx.job/list] (>!! command-ch [:list-jobs]) 
+           [:onyx.job/start params] (start-job-handler ?reply-fn 
+                                                       command-ch 
+                                                       params 
+                                                       (re-pattern (:regex-str params))
+                                                       (ev->cookie ev-msg))
            [:chsk/uidport-close] (println "User " (ev->cookie ev-msg) " closed page. Can flush job?")
            :else (println "Got event " event))))
 
@@ -53,7 +54,6 @@
              (f msg)) 
            (recur)))
 
-
 ; If multiple grouping tasks are run, each task will send a segment
 ; with the top n words, with no intersections between the maps.
 ; We will thus merge into a top-words/hashtags atom, and then only send
@@ -62,28 +62,22 @@
   [merged n]
   (into {} (take n (reverse (sort-by val merged)))))
 
-(comment
-  (let [x {:a 1 :b 1}]
-    (match [x]
-           [{:a _ :b 2}] :a0
-           [{:a 1 :b 1}] :a1
-           [{:c 3 :d _ :e 4}] :a2
-           :else nil)))
-
 (def num-shown 8)
 
-; TODO use match
 (defn segment->msg [segment top-words top-hashtags]
-  (cond (= segment :done) [:onyx.job/done] 
-        (contains? segment :onyx.job/started) [:onyx.job/started (str (:onyx.job/started segment))]
-        (contains? segment :onyx.job/list) [:onyx.job/list (:onyx.job/list segment)]
-        (and (:tweet segment) (:sente/uid segment)) [:tweet/new-user-filter segment] 
-        (contains? segment :tweet) [:tweet/new segment] 
-        ; TODO: only select top words before sending to client
-        (contains? segment :top-words) [:agg/top-word-count (top->displayed-trend 
-                                                              (swap! top-words merge (:top-words segment)) num-shown)] 
-        (contains? segment :top-hashtags) [:agg/top-hashtag-count (top->displayed-trend 
-                                                                    (swap! top-hashtags merge (:top-hashtags segment)) num-shown)]))
+  (match [segment]
+         [:done] identity
+         [{:top-hashtags t}] [:agg/top-hashtag-count (top->displayed-trend 
+                                                       (swap! top-hashtags merge t) num-shown)]
+         [{:top-words t}] [:agg/top-word-count (top->displayed-trend 
+                                                 (swap! top-words merge t) num-shown)]
+         [{:sente/uid uid :tweet-id id :twitter-user user}] [:tweet/filtered-tweet {:tweet-id id :twitter-user user}] 
+         [{:tweet-id id :twitter-user user}] [:tweet/new {:tweet-id id :twitter-user user}] 
+         [{:onyx.job/done regex}] [:onyx.job/done (str regex)]
+         [{:onyx.job/started started}] [:onyx.job/started (str started)]
+         [{:onyx.job/start-failed msg}] [:onyx.job/failed msg]
+         [{:onyx.job/list coll}] [:onyx.job/list coll]
+         :else (println "Couldn't match segment")))
 
 
 
@@ -95,5 +89,4 @@
                         (= :any user) (:any @uids)      
                         :else (list user))]
       (when-let [msg (segment->msg segment top-words top-hashtags)]
-        ;(println "sending " uid " " msg)
         (chsk-send! uid msg))))))
