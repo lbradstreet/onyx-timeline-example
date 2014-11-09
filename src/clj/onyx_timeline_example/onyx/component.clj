@@ -134,7 +134,7 @@
     :onyx/batch-size batch-size 
     :onyx/batch-timeout batch-timeout
     :onyx/doc "Reads segments from a core.async channel"}
-
+   
    {:onyx/name :in-take
     :onyx/ident :core.async/read-from-chan
     :onyx/type :input
@@ -356,7 +356,7 @@
                        component/start)]
     (swap! jobs assoc (:uid job-info) job-info)
     (>!! (:timeline/output-ch peer-conf) {:onyx.job/started (:regex job-info)})
-    (future (do @(onyx.api/await-job-completion (:conn onyx-connection) (str job-id))
+    (future (do @(onyx.api/await-job-completion (:conn onyx-connection) job-id)
                 (>!! (:timeline/output-ch peer-conf) {:onyx.job/done (:regex job-info)})
                 (swap! jobs dissoc (:uid job-info))
                 (component/stop onyx-peers)))))
