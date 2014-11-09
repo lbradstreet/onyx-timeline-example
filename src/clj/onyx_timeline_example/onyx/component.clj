@@ -2,6 +2,7 @@
   (:require [clojure.core.async :as a :refer [go-loop pipe chan >!! <!! close!]]
             [clojure.data.fressian :as fressian]
             [clojure.core.match :as match :refer (match)]
+            [clojure.string :as s]
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
             [onyx.peer.task-lifecycle-extensions :as l-ext]
@@ -32,6 +33,21 @@
        (filter (fn [word] (> (count word) min-chars)))
        (map (fn [word] {:word word}))))
 
+(defn lower-text 
+  "Do not lower if any multibyte characters are in string.
+  Not sure why this messes up encoding in browser."
+  [s]
+  (if (= (count s)
+         (->> s 
+              (map (comp count #(.getBytes % "UTF-8") str))
+              (reduce +)))
+    (s/lower-case s)
+    s))
+
+(defn normalize-words [{:keys [word]}]
+  {:word (-> word 
+             lower-text
+             (s/replace #"[,.:']$" ""))})
 
 (defn update-trends [{:keys [tokens counts]} token period]
   (let [ts (conj tokens token)
@@ -99,8 +115,9 @@
   [[:in :extract-tweet]
    [:extract-tweet :filter-by-regex]
    [:filter-by-regex :split-into-words]
+   [:split-into-words :normalize-words]
    [:filter-by-regex :extract-hashtags]
-   [:split-into-words :word-count]
+   [:normalize-words :word-count]
    [:extract-hashtags :hashtag-count]
    [:filter-by-regex :out]
    [:word-count :out]
@@ -152,6 +169,13 @@
     :onyx/type :function
     :onyx/consumption :concurrent
     :timeline.words/min-chars 3
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
+
+   {:onyx/name :normalize-words
+    :onyx/fn :onyx-timeline-example.onyx.component/normalize-words
+    :onyx/type :function
+    :onyx/consumption :concurrent
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
@@ -337,6 +361,11 @@
                 (swap! jobs dissoc (:uid job-info))
                 (component/stop onyx-peers)))))
 
+(defn jobs->list [jobs]
+  {:onyx.job/list (map (juxt (comp (partial take 5) str :uid) 
+                             :regex) 
+                       (vals jobs))})
+
 (defrecord OnyxScheduler [conf]
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
@@ -347,7 +376,7 @@
                (let [msg (<!! cmd-ch)]
                  (match msg
                         [:list-jobs]
-                        (>!! (:timeline/output-ch peer-conf) {:onyx.job/list (map :regex (vals @(:scheduler/jobs peer-conf)))})
+                        (>!! (:timeline/output-ch peer-conf) (jobs->list @(:scheduler/jobs peer-conf)))
                         [:start-filter-job [regex uid]]
                         (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
                               task-input-ch (pipe-input-take timeline-tap 1000)
