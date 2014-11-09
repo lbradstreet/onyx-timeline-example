@@ -38,15 +38,15 @@
   (match [msg-type contents]
          [:onyx.job/started msg] (println "Onyx job started " msg)
          [:onyx.job/list msg] (println "Onyx job list " msg)
-         [:onyx.job/done nil] (println "Onyx job done")
+         [:onyx.job/start-failed msg] (println "Onyx job failed to start as: " msg)
+         [:onyx.job/done regex] (println "Onyx job done: " regex)
          [:tweet/new tweet] (put! timeline-chan tweet)
-         [:tweet/new-user-filter tweet] (put! custom-filter-chan tweet)
+         [:tweet/filtered-tweet tweet] (put! custom-filter-chan tweet)
          [:agg/top-word-count counts] (put! words-agg-chan counts)
          [:agg/top-hashtag-count counts] (put! hashtags-agg-chan counts)
-         :else (println "Couldn't match payload " payload)))
+         :else (println "Couldn't match payload")))
 
 (defn- event-handler [{:keys [event]}]
-  (println "got event " event)
   (match event
          [:chsk/state new-state] (print "Chsk state change:" new-state)
          [:chsk/recv payload] (handle-payload payload)
@@ -60,8 +60,7 @@
   (update-in timeline [:tweets] (fn [tweets] 
                                   (let [trunc-tweets (take max-timeline-length tweets)]
                                     (cons {:tweet-id (:tweet-id tweet)
-                                           :twitter-user (:twitter-user tweet)
-                                           :tweet (:tweet tweet)} 
+                                           :twitter-user (:twitter-user tweet)} 
                                           trunc-tweets)))))
 
 (defcomponent top-word-counts [data owner]
@@ -128,6 +127,7 @@
                                     "/status/"
                                     (:tweet-id tweet))}))))
   (did-mount [_]
+             ; TODO: on mount, adjust scroll position by size of the loading tweet.
              (let [node (om/get-node owner)]
                ;(println "Scrolltop is " (.-scrollTop node) " height is " (.-scrollHeight node))
                ;(.scrollTo js/window (.-scrollX js/window) 300)
@@ -160,7 +160,8 @@
 
 (defcomponent app [data owner]
   (did-mount [_]
-             (.bind (.-events js/twttr) "rendered" (fn [widget] (println "Created widget " #_(.-id widget)))))
+             ; TODO: on render, adjust scroll position
+             (.bind (.-events js/twttr) "rendered" identity #_(fn [widget] (println "Created widget " (.-id widget)))))
   (render-state [_ {:keys [regex-str]}]
                 (g/grid {}
                         (g/row {:class "show-grid grids-examples"}
@@ -169,21 +170,23 @@
                                                  (i/input {:type "text" 
                                                            :label "Custom Filter Regex"
                                                            :on-change (fn [e] (om/set-state! owner :regex-str (.. e -target -value)))})
-                                                 (b/button {:on-click
-                                                            (fn [e] (chsk-send! [:job/start {:regex-str regex-str}] ; event
-                                                                               8000 ; timeout
-                                                                               ;; Optional callback:
-                                                                               (fn [edn-reply]
-                                        ; Checks for :chsk/closed, :chsk/timeout, :chsk/error
-                                                                                 (if (sente/cb-success? edn-reply) 
-                                                                                   (println "Successful sente reply " edn-reply)
-                                                                                   (println "Error! " edn-reply)))))}
-                                                           "Send filter job"))))
+
+                                                 (b/button {:on-click (fn [e] 
+                                                                        (chsk-send! [:onyx.job/start {:regex-str regex-str}] 
+                                                                                    8000 
+                                                                                    (fn [edn-reply]
+                                                                                      (if (sente/cb-success? edn-reply) 
+                                                                                        (println "Successful sente reply " edn-reply)
+                                                                                        (println "Error! " edn-reply)))))}
+                                                           "Send filter job")
+
+                                                 (b/button {:on-click (fn [e] (chsk-send! [:onyx.job/list]))}
+                                                            "List jobs"))))
                         (g/row {:class "show-grid"}
                                (g/col {:xs 6 :md 8}
                                       (om/build timeline 
                                                 (:custom-filter-timeline data) 
-                                                {:opts {:timeline-ch (:custom-filter (om/get-shared owner :comms))} }))
+                                                {:opts {:timeline-ch (:custom-filter (om/get-shared owner :comms))}}))
                                (g/col {:xs 6 :md 8}
                                       (om/build timeline 
                                                 (:timeline data) 

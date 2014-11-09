@@ -11,16 +11,16 @@
   (is (= [] (onyx/filter-by-regex #"(?i).*Luc.*" {:tweet "Mike"}))))
 
 (deftest test-word-count
-  (let [state (atom {})]
-    (onyx/word-count state false {:word "Hi"})
-    (is (= {"Hi" 1}  @state)))
+  (let [state (atom {:counts {} :tokens []})]
+    (onyx/word-count state 500 false {:word "Hi"})
+    (is (= {:counts {"Hi" 1} :tokens ["Hi"]}  @state)))
   
-  (let [state (atom {"Hi" 1})]
-    (onyx/word-count state false {:word "Hi"})
-    (is (= {"Hi" 2}  @state)))
-  
-  (let [state (atom {"Hi" 3})]
-    (onyx/word-count state false {:word "Bye"})
-    (is (= {"Hi" 3 "Bye" 1}  @state))))
+  (let [state (atom {:counts {"Hi" 1} :tokens ["Hi"]})]
+    (onyx/word-count state 500 false {:word "Hi"})
+    (is (= {:counts {"Hi" 2} :tokens ["Hi" "Hi"]}  @state)))
+
+  (let [state (atom {:counts {"Hi" 1} :tokens ["Hi"]})]
+    (onyx/word-count state 1 false {:word "Bye"})
+    (is (= {:counts {"Bye" 1} :tokens ["Bye"]}  @state))))
 
 (run-tests)

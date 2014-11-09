@@ -36,6 +36,8 @@
                   :peer {:hornetq/mode :vm
                          :zookeeper/address "127.0.0.1:2185"
                          :onyx/id onyx-id
+                         :scheduler/max-jobs 5
+                         :scheduler/num-peers-filter 10
                          :scheduler/jobs (atom {})
                          :scheduler/command-ch onyx-command-ch
                          :timeline/input-ch input-ch
