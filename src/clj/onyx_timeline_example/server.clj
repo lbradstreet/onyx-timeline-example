@@ -3,6 +3,7 @@
             [clojure.tools.namespace.repl :refer [refresh]]
             [clojure.edn :as edn]
             [clojure.tools.logging :as log]
+            [onyx-timeline-example.communicator.websockets :as web]
             [onyx-timeline-example.communicator.component :as comm]
             [onyx-timeline-example.communicator.twitter :as twitter]
             [onyx-timeline-example.http.component :as http]
@@ -53,11 +54,10 @@
                                                      (:num-peers (:onyx conf))) [:onyx-connection])
    :onyx-scheduler (component/using (onyx/new-onyx-scheduler conf) [:onyx-connection])
    :onyx-job (component/using (onyx/new-onyx-job conf) [:onyx-connection])
-   :comm-channels (comm/new-sente-communicator-channels)
-   :comm (component/using (comm/new-sente-communicator) {:channels :comm-channels 
-                                                         :onyx-scheduler :onyx-scheduler})
+   :web (web/new-web-state)
+   :comm (component/using (comm/new-sente-communicator) [:web :onyx-scheduler])
    :http (component/using (http/new-http-server conf) [:comm])
-   :switchboard (component/using (sw/new-switchboard conf) [:comm-channels])))
+   :switchboard (component/using (sw/new-switchboard conf) [:web])))
 
 (def system nil)
 

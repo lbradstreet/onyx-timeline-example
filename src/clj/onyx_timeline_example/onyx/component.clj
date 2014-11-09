@@ -48,17 +48,14 @@
       {:tokens ts
        :counts (assoc counts token updated-count)})))
 
-; move to conf
-(def rolling-total-period 10000)
-
-(defn word-count [local-state exclude-hashtags? {:keys [word] :as segment}]
+(defn word-count [local-state trend-period exclude-hashtags? {:keys [word] :as segment}]
   (if (and exclude-hashtags? (.startsWith word "#"))
     []
-    (do (swap! local-state update-trends word rolling-total-period)
+    (do (swap! local-state update-trends word trend-period)
         [])))
 
-(defn hashtag-count [local-state {:keys [hashtag] :as segment}]
-  (swap! local-state update-trends hashtag rolling-total-period)
+(defn hashtag-count [local-state trend-period {:keys [hashtag] :as segment}]
+  (swap! local-state update-trends hashtag trend-period)
   [])
 
 (defn top-words [m]
@@ -165,6 +162,7 @@
     :onyx/group-by-key :word
     :onyx/consumption :concurrent
     :timeline.words/exclude-hashtags? true
+    :timeline.words/trend-period 10000
     :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge-words
     :lib-onyx.interval/ms 3000
     :onyx/batch-size batch-size
@@ -176,6 +174,7 @@
     :onyx/type :function
     :onyx/group-by-key :hashtag
     :onyx/consumption :concurrent
+    :timeline.hashtags/trend-period 10000
     :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge-hashtags
     :lib-onyx.interval/ms 5000
     :onyx/batch-size batch-size
@@ -256,13 +255,15 @@
 (defmethod l-ext/inject-lifecycle-resources :word-count
   [_ {:keys [onyx.core/queue onyx.core/task-map] :as event}]
   (let [local-state (atom {:tokens [] :counts {}})]
-    {:onyx.core/params [local-state (:timeline.words/exclude-hashtags? task-map)]
+    {:onyx.core/params [local-state 
+                        (:timeline.words/trend-period task-map)
+                        (:timeline.words/exclude-hashtags? task-map)]
      :timeline/word-count-state local-state}))
 
 (defmethod l-ext/inject-lifecycle-resources :hashtag-count
-  [_ {:keys [onyx.core/queue] :as event}]
+  [_ {:keys [onyx.core/queue onyx.core/task-map] :as event}]
   (let [local-state (atom {:tokens [] :counts {}})]
-    {:onyx.core/params [local-state]
+    {:onyx.core/params [local-state (:timeline.hashtags/trend-period task-map)]
      :timeline/hashtag-count-state local-state}))
 
 (defmethod l-ext/inject-lifecycle-resources :wrap-sente-user-info

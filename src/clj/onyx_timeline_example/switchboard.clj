@@ -16,7 +16,7 @@
   (start [component]
     (println "Starting Switchboard Component")
     (pipe (:timeline/output-ch (:peer (:onyx conf)))
-          (:timeline/sente-ch (:comm-channels component)))
+          (:timeline/sente-ch (:web component)))
     component)
   (stop [component]
     (println "Stopping Switchboard Component")

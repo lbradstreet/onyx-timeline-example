@@ -12,7 +12,7 @@
 ;; serialization format for client<->server comm
 (def packer (sente-transit/get-flexi-packer :json))
 
-(defrecord SenteCommunicator [channels onyx-scheduler chsk-router]
+(defrecord SenteCommunicator [web onyx-scheduler chsk-router]
   component/Lifecycle
   (start [component]
     (println "Starting Sente Communicator Component")
@@ -20,7 +20,10 @@
           (sente/make-channel-socket! {:packer packer :user-id-fn ws/user-id-fn})
           event-handler (ws/make-handler (:command-ch onyx-scheduler))
           chsk-router (sente/start-chsk-router! ch-recv event-handler)]
-      (ws/send-loop (:timeline/sente-ch channels) (ws/send-stream connected-uids send-fn))
+      (ws/send-loop (:timeline/sente-ch web) (ws/send-stream connected-uids 
+                                                                            send-fn 
+                                                                            (:top-words web)
+                                                                            (:top-hashtags web)))
       (assoc component 
              :ajax-post-fn ajax-post-fn
              :ajax-get-or-ws-handshake-fn ajax-get-or-ws-handshake-fn
@@ -31,15 +34,3 @@
     (assoc component :chsk-router nil)))
 
 (defn new-sente-communicator [] (map->SenteCommunicator {}))
-
-(defrecord SenteCommunicator-Channels []
-  component/Lifecycle
-  (start [component]
-    (println "Starting Communicator Channels Component")
-    (assoc component :timeline/sente-ch (chan)))
-  (stop [component]
-    (println "Stopping Communicator Channels Component")
-    (assoc component :timeline/sente-ch nil)))
-
-(defn new-sente-communicator-channels [] (map->SenteCommunicator-Channels {}))
-
