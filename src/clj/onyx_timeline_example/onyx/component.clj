@@ -368,40 +368,43 @@
                              (comp str :regex)) 
                        (vals jobs))})
 
-; FIXME: user could start a job twice - shouldn't allow this, should just send back job failed.
-; Something isn't closing channels?
+(defn build-filter-catalog [regex uid]
+  (-> (zipmap (map :onyx/name catalog) catalog) 
+      (assoc-in [:in-take :sente/uid] uid)    
+      (assoc-in [:filter-by-regex :timeline/regex] regex)
+      (assoc-in [:wrap-sente-user-info :sente/uid] uid)
+      vals))
+
 (defrecord OnyxScheduler [conf]
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
     (println "Starting Onyx Scheduler")
     (let [peer-conf (:peer (:onyx conf))
-          cmd-ch (:scheduler/command-ch peer-conf)]
+          cmd-ch (:scheduler/command-ch peer-conf)
+          jobs (:scheduler/jobs peer-conf)]
       (go-loop []
                (let [msg (<!! cmd-ch)]
                  (match msg
                         [:list-jobs]
-                        (>!! (:timeline/output-ch peer-conf) (jobs->list @(:scheduler/jobs peer-conf)))
+                        (>!! (:timeline/output-ch peer-conf) (jobs->list @jobs))
 
                         [:start-filter-job [regex uid]]
-                        (if (>= (count @(:scheduler/jobs peer-conf))
-                                (:scheduler/max-jobs peer-conf))
-                          (>!! (:timeline/output-ch peer-conf) 
-                               {:onyx.job/start-failed "Failed to start job as too many jobs are running"})
-                          (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
-                                task-input-ch (pipe-input-take timeline-tap 1000)
-                                ; Add a comment here about how an atom wouldn't be necessary 
-                                ; if we use a queue where we pass in serializable parameters
-                                ; via the task-opts.
-                                cat (-> (zipmap (map :onyx/name catalog) catalog) 
-                                        (assoc-in [:in-take :sente/uid] uid)    
-                                        (assoc-in [:filter-by-regex :timeline/regex] regex)
-                                        (assoc-in [:wrap-sente-user-info :sente/uid] uid)
-                                        vals)]
-                            (start-job! onyx-connection 
-                                        peer-conf 
-                                        {:input-ch task-input-ch :regex regex :uid uid}
-                                        cat 
-                                        client-workflow)))) 
+                        (cond (>= (count @jobs) (:scheduler/max-jobs peer-conf))
+                              (>!! (:timeline/output-ch peer-conf) 
+                                   {:onyx.job/start-failed "Failed to start job as too many jobs are running"})
+
+                              (get @jobs uid)
+                              (>!! (:timeline/output-ch peer-conf) 
+                                   {:onyx.job/start-failed "Failed to start job as you are already running a job."})
+
+                              :else
+                              (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
+                                    task-input-ch (pipe-input-take timeline-tap 1000)]
+                                (start-job! onyx-connection 
+                                            peer-conf 
+                                            {:input-ch task-input-ch :regex regex :uid uid}
+                                            (build-filter-catalog regex uid) 
+                                            client-workflow)))) 
                  (recur)))
       (assoc component :command-ch cmd-ch)))
   (stop [component]

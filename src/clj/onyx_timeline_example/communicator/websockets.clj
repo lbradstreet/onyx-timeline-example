@@ -75,7 +75,7 @@
          [{:tweet-id id :twitter-user user}] [:tweet/new {:tweet-id id :twitter-user user}] 
          [{:onyx.job/done regex}] [:onyx.job/done (str regex)]
          [{:onyx.job/started started}] [:onyx.job/started (str started)]
-         [{:onyx.job/start-failed msg}] [:onyx.job/failed msg]
+         [{:onyx.job/start-failed msg}] [:onyx.job/start-failed msg]
          [{:onyx.job/list coll}] [:onyx.job/list coll]
          :else (println "Couldn't match segment")))
 
