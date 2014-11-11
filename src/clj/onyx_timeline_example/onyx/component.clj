@@ -24,8 +24,7 @@
 
 (defn extract-hashtags [{:keys [tweet]}]
   (->> (into-words tweet)
-       (map (partial re-matches #"#.*"))
-       (filter identity)
+       (keep (partial re-matches #"#.*"))
        (map (fn [hashtag] {:hashtag hashtag}))))
 
 (defn split-into-words [min-chars {:keys [tweet]}]
@@ -33,25 +32,15 @@
        (filter (fn [word] (> (count word) min-chars)))
        (map (fn [word] {:word word}))))
 
-; Something is messing up multibyte characters, but it's not this
-; Maybe regexes?
-; (defn lower-text 
-;   "Do not lower if any multibyte characters are in string.
-;   Not sure why this messes up encoding in browser."
-;   [s]
-;   (if (= (count s)
-;          (->> s 
-;               (map (comp count #(.getBytes % "UTF-8") str))
-;               (reduce +)))
-;     (s/lower-case s)
-;     s))
-
 (defn normalize-words [{:keys [word]}]
   {:word (-> word 
              s/lower-case
-             (s/replace #"[,.:']$" ""))})
+             (s/replace #"[,.:']+$" ""))})
 
-(defn update-trends [{:keys [tokens counts]} token period]
+(defn update-trends 
+  "Maintains a rolling count of tokens (words, hashtags, etc)," 
+  " over the last period num token occurrences"
+  [{:keys [tokens counts]} token period]
   (let [ts (conj tokens token)
         updated-count (inc (counts token 0))] 
     (if (> (count ts) period)
@@ -356,7 +345,6 @@
                        (assoc :onyx-connection onyx-connection)
                        component/start)]
     (swap! jobs assoc (:uid job-info) job-info)
-    (println "Jobs now " @jobs)
     (>!! (:timeline/output-ch peer-conf) {:onyx.job/started (:regex job-info)})
     (future (do @(onyx.api/await-job-completion (:conn onyx-connection) job-id)
                 (>!! (:timeline/output-ch peer-conf) {:onyx.job/done (:regex job-info)})
@@ -375,6 +363,12 @@
       (assoc-in [:wrap-sente-user-info :sente/uid] uid)
       vals))
 
+; TODO: ensure you can only send a job when box is blue with checkmark.
+; Add a jobs listing that shows the running jobs.
+; Add a warning timeout thing when you run a job twice.
+; Document.
+; Ship it.
+
 (defrecord OnyxScheduler [conf]
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]
@@ -385,10 +379,10 @@
       (go-loop []
                (let [msg (<!! cmd-ch)]
                  (match msg
-                        [:list-jobs]
+                        [:scheduler/list-jobs]
                         (>!! (:timeline/output-ch peer-conf) (jobs->list @jobs))
 
-                        [:start-filter-job [regex uid]]
+                        [:scheduler/start-filter-job [regex uid]]
                         (cond (>= (count @jobs) (:scheduler/max-jobs peer-conf))
                               (>!! (:timeline/output-ch peer-conf) 
                                    {:onyx.job/start-failed "Failed to start job as too many jobs are running"})
@@ -399,7 +393,7 @@
 
                               :else
                               (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
-                                    task-input-ch (pipe-input-take timeline-tap 1000)]
+                                    task-input-ch (pipe-input-take timeline-tap (:user-filter/num-tweets peer-conf))]
                                 (start-job! onyx-connection 
                                             peer-conf 
                                             {:input-ch task-input-ch :regex regex :uid uid}

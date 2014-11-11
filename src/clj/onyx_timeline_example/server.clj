@@ -18,9 +18,6 @@
 
 (def capacity 1000)
 
-; There should be a conf component!
-; can probably get rid of communicator channels then.
-; or maybe put the sente channel in here too.
 (def input-ch (chan (sliding-buffer capacity)))
 (def output-ch (chan (sliding-buffer capacity)))
 (def onyx-command-ch (chan))
@@ -53,6 +50,7 @@
                          :scheduler/num-peers-filter 10
                          :scheduler/jobs (atom {})
                          :scheduler/command-ch onyx-command-ch
+                         :user-filter/num-tweets 5000
                          :timeline/input-ch input-ch
                          :timeline/input-ch-mult (mult input-ch)
                          :timeline/output-ch output-ch}

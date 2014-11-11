@@ -29,7 +29,7 @@
     uid))
 
 (defn start-job-handler [reply-fn command-ch params regexp uid]
-  (>!! command-ch [:start-filter-job [regexp uid]])
+  (>!! command-ch [:scheduler/start-filter-job [regexp uid]])
   (reply-fn :success))
 
 (defn ev->cookie [ev-msg]
@@ -38,7 +38,7 @@
 (defn make-handler [command-ch]
   (fn [{:keys [event ?reply-fn] :as ev-msg}]
     (match event
-           [:onyx.job/list] (>!! command-ch [:list-jobs]) 
+           [:onyx.job/list] (>!! command-ch [:scheduler/list-jobs]) 
            [:onyx.job/start params] (start-job-handler ?reply-fn 
                                                        command-ch 
                                                        params 
