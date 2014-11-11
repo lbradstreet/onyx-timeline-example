@@ -66,7 +66,7 @@
 
 (defn segment->msg [segment top-words top-hashtags]
   (match [segment]
-         [:done] identity
+         [:done] nil
          [{:top-hashtags t}] [:agg/top-hashtag-count (top->displayed-trend 
                                                        (swap! top-hashtags merge t) num-shown)]
          [{:top-words t}] [:agg/top-word-count (top->displayed-trend 

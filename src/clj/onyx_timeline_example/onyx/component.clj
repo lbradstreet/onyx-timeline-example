@@ -350,11 +350,13 @@
         job-id (onyx.api/submit-job (:conn onyx-connection)
                                     {:catalog catalog :workflow workflow})
         ; the common timeline will be hogging all of the peers
-        ; so we need to stand up new peers which will be allocated to the new job
+        ; so we need to stand up new peers which will be allocated any job that
+        ; is starved of peers, i.e. the new job
         onyx-peers (-> (new-onyx-peers peer-conf (:scheduler/num-peers-filter peer-conf))
                        (assoc :onyx-connection onyx-connection)
                        component/start)]
     (swap! jobs assoc (:uid job-info) job-info)
+    (println "Jobs now " @jobs)
     (>!! (:timeline/output-ch peer-conf) {:onyx.job/started (:regex job-info)})
     (future (do @(onyx.api/await-job-completion (:conn onyx-connection) job-id)
                 (>!! (:timeline/output-ch peer-conf) {:onyx.job/done (:regex job-info)})
@@ -366,6 +368,8 @@
                              (comp str :regex)) 
                        (vals jobs))})
 
+; FIXME: user could start a job twice - shouldn't allow this, should just send back job failed.
+; Something isn't closing channels?
 (defrecord OnyxScheduler [conf]
   component/Lifecycle
   (start [{:keys [onyx-connection] :as component}]

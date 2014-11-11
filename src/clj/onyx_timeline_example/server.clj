@@ -3,6 +3,7 @@
             [clojure.tools.namespace.repl :refer [refresh]]
             [clojure.edn :as edn]
             [clojure.tools.logging :as log]
+            [taoensso.timbre.appenders.rotor :as rotor]
             [onyx-timeline-example.communicator.websockets :as web]
             [onyx-timeline-example.communicator.component :as comm]
             [onyx-timeline-example.communicator.twitter :as twitter]
@@ -24,6 +25,16 @@
 (def output-ch (chan (sliding-buffer capacity)))
 (def onyx-command-ch (chan))
 
+(def log-config {:appenders {:standard-out {:enabled? false}
+                             :spit {:enabled? false}
+                             :rotor {:min-level :warn
+                                     :enabled? true
+                                     :async? false
+                                     :max-message-per-msecs nil
+                                     :fn rotor/appender-fn}}
+                 :shared-appender-config {:rotor {:path "timeline.log" 
+                                                  :max-size (* 512 10240) :backlog 5}}})
+
 (def conf {:port 8888
            :onyx {:coord {:hornetq/mode :vm ;; Run HornetQ inside the VM for convenience
                           :hornetq/server? true
@@ -31,11 +42,13 @@
                           :zookeeper/address "127.0.0.1:2185"
                           :zookeeper/server? true ;; Run ZK inside the VM for convenience
                           :zookeeper.server/port 2185
+                          :onyx.log/config log-config
                           :onyx/id onyx-id
                           :onyx.coordinator/revoke-delay 5000}
                   :peer {:hornetq/mode :vm
                          :zookeeper/address "127.0.0.1:2185"
                          :onyx/id onyx-id
+                         :onyx.log/config log-config
                          :scheduler/max-jobs 5
                          :scheduler/num-peers-filter 10
                          :scheduler/jobs (atom {})
@@ -80,9 +93,5 @@
   (stop)
   (refresh :after 'user/go))
 
-;(go)
-;(stop)
-;(reset)
-
 (defn -main [& args]
-  (alter-var-root #'system component/start))
+  (go))

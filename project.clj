@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
-  ;:jvm-opts ["-Xmx4g" "-server"] 
+  :jvm-opts ["-Xmx4g" "-server"] 
 
   :source-paths ["src/clj" "src/cljs"]
   :test-paths ["test/clj"]
@@ -43,6 +43,8 @@
 
   :plugins [[lein-cljsbuild "1.0.3"]
             [lein-environ "1.0.0"]]
+
+  :main onyx-timeline-example.server
 
   :min-lein-version "2.5.0"
 
