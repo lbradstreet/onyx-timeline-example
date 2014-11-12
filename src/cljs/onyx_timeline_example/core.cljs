@@ -36,7 +36,6 @@
   (def chsk-state app-state))  ; Watchable, read-only atom
 
 (defn handle-payload [[msg-type contents]]
-  (println "Msg " msg-type contents)
   (match [msg-type contents]
          [(:or :onyx.job/started
                :onyx.job/list 
@@ -107,7 +106,7 @@
                          ([[msg-type contents]] 
                           (case msg-type
                             :onyx.job/list (om/update! data contents)
-                            :onyx.job/done (om/transact! data [] (fn [jobs] (remove (partial = contents) jobs)))
+                            :onyx.job/done (om/transact! data [] (fn [jobs] (vec (remove (partial = contents) jobs))))
                             :onyx.job/started (om/transact! data [] (fn [jobs] (conj jobs contents))))))
                        (recur)))
   (render-state [_ _]
@@ -182,14 +181,14 @@
                          ([msg]
                             (om/transact! data #(add-tweet % msg))))
                        (recur)))
-  (did-mount [_]
-             (println "Mounted timeline, time to resize and attach to window resize event."))
+  ; (did-mount [_]
+  ;            (println "Mounted timeline, time to resize and attach to window resize event."))
   (render-state [_ _]
                 (p/panel
                   {:header "Timeline"
                    :list-group (d/ul {:class "list-group"
                                       :style {:overflow-y "scroll"
-                                              :height "500px"}}
+                                              :height 800}}
                                      (for [tweet (:tweets data)]
                                        (d/li {:key (:tweet-id tweet)
                                               :class "list-group-item"}
@@ -202,22 +201,35 @@
              ;(.bind (.-events js/twttr) "rendered" identity #_(fn [widget] (println "Created widget " (.-id widget))))
              )
   (render-state [_ {:keys [regex-str]}]
-                (g/grid {}
+                (let [regex-entered? (not-empty regex-str)]
+                 (g/grid {}
                         (g/row {:class "show-grid grids-examples"}
-                               (g/col {:xs 6 :md 8}
-                                      (b/toolbar {} 
-                                                 (i/input {:type "text" 
-                                                           :label "Custom Filter Regex"
-                                                           :on-change (fn [e] (om/set-state! owner :regex-str (.. e -target -value)))})
+                               (b/toolbar {} 
+                                          (d/div
+                                            {:class "form-horizontal"
+                                             :style {:padding-bottom 10}}
+                                            (i/input {:type "text" 
+                                                      :label "Custom Filter Regex"
+                                                      :feedback true
+                                                      :bs-style (if regex-entered? "success" "error")
+                                                      :on-change (fn [e] (om/set-state! owner :regex-str (.. e -target -value)))})
 
-                                                 (b/button {:on-click (fn [e] 
-                                                                        (chsk-send! [:onyx.job/start {:regex-str regex-str}] 
-                                                                                    8000 
-                                                                                    (fn [edn-reply]
-                                                                                      (if (sente/cb-success? edn-reply) 
-                                                                                        (println "Successful sente reply " edn-reply)
-                                                                                        (println "Error! " edn-reply)))))}
-                                                           "Send filter job"))))
+                                            (b/button {:on-click (fn [e] 
+                                                                   (when regex-entered?
+                                                                     (chsk-send! [:onyx.job/start {:regex-str regex-str}] 
+                                                                                 8000 
+                                                                                 (fn [edn-reply]
+                                                                                   (if (sente/cb-success? edn-reply) 
+                                                                                     (println "Successful sente reply " edn-reply)
+                                                                                     (println "Error! " edn-reply))))))}
+                                                      "Send filter job"))))
+
+                        (g/row {} 
+                               (g/col {:xs 4 :md 4}
+                                      (om/build top-word-counts (:top-word-counts data) {}))
+                               (g/col {:xs 4 :md 4} 
+                                      (om/build top-hashtag-counts (:top-hashtag-counts data) {}))
+                               (g/col {:xs 4 :md 4} (om/build jobs-list (:jobs data) {})))
                         (g/row {:class "show-grid"}
                                (g/col {:xs 6 :md 8}
                                       (om/build timeline 
@@ -227,10 +239,7 @@
                                       (om/build timeline 
                                                 (:timeline data) 
                                                 {:opts {:timeline-ch (:timeline (om/get-shared owner :comms))} }))
-                               (g/col {:xs 4 :md 4}
-                                      (om/build top-word-counts (:top-word-counts data) {})
-                                      (om/build top-hashtag-counts (:top-hashtag-counts data) {})
-                                      (om/build jobs-list (:jobs data) {}))))))
+                               )))))
 
 (defn main []
   (om/root app 

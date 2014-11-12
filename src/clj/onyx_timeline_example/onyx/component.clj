@@ -365,14 +365,6 @@
                 (swap! jobs dissoc (:uid job-info))
                 (component/stop onyx-peers)))))
 
-
-; (defn build-filter-catalog [regex uid]
-;   (-> (zipmap (map :onyx/name catalog) catalog) 
-;       (merge {:in-take {:sente/uid uid}
-;               :wrap-sente-user-info {:sente/uid uid}
-;               :filter-by-regex {:timeline/regex regex}})
-;       vals))
-
 (defn build-filter-catalog [regex uid]
   (-> (zipmap (map :onyx/name catalog) catalog) 
       (assoc-in [:in-take :sente/uid] uid)    
