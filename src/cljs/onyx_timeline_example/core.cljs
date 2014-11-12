@@ -162,7 +162,6 @@
              (let [node (om/get-node owner)]
                (.load (.-widgets js/twttr) node))))
 
-
 (defcomponent alert-widget [alert-data owner]
   (init-state  [_]
               {:alert-msg nil
@@ -202,43 +201,44 @@
                                              (om/build tweet-widget tweet {}))))}
                   nil)))
 
-(defcomponent app [data owner]
-  (did-mount [_]
-             ; TODO: on render, adjust scroll position
-             ;(.bind (.-events js/twttr) "rendered" identity #_(fn [widget] (println "Created widget " (.-id widget))))
-             )
+(defcomponent new-job-toolbar [data owner]
   (render-state [_ {:keys [regex-str]}]
-                (let [regex-entered? (not-empty regex-str)]
+          (b/toolbar {} 
+                     (let [regex-entered? (not-empty regex-str)]
+                       (d/div {:class "form-horizontal"
+                               :style {:padding-bottom 10}}
+                              (i/input {:type "text" 
+                                        :label "Custom Filter Regex"
+                                        :placeholder "Enter regex (e.g. .*hi.*)"
+                                        :ref "input"
+                                        :feedback true
+                                        :bs-style (if regex-entered? "success" "error")
+                                        :on-change (fn [e] (om/set-state! owner :regex-str (.. e -target -value)))})
+                              (b/button {:on-click (fn [e] 
+                                                     (when regex-entered?
+                                                       (set! (.-value (om/get-node owner "input")))
+                                                       (om/set-state! owner :regex-str nil)
+                                                       (chsk-send! [:onyx.job/start {:regex-str regex-str}] 
+                                                                   8000 
+                                                                   (fn [edn-reply]
+                                                                     (if (sente/cb-success? edn-reply) 
+                                                                       (println "Successful sente reply " edn-reply)
+                                                                       (println "Error! " edn-reply))))))}
+                                        "Send filter job")
+                              (om/build alert-widget {} {}))))))
+
+(defcomponent app [data owner]
+  (render-state [_ _]
                  (g/grid {}
-                        (g/row {:class "show-grid grids-examples"}
-                               (b/toolbar {} 
-                                          (d/div
-                                            {:class "form-horizontal"
-                                             :style {:padding-bottom 10}}
-                                            (i/input {:type "text" 
-                                                      :label "Custom Filter Regex"
-                                                      :feedback true
-                                                      :bs-style (if regex-entered? "success" "error")
-                                                      :on-change (fn [e] (om/set-state! owner :regex-str (.. e -target -value)))})
-
-                                            (b/button {:on-click (fn [e] 
-                                                                   (when regex-entered?
-                                                                     (chsk-send! [:onyx.job/start {:regex-str regex-str}] 
-                                                                                 8000 
-                                                                                 (fn [edn-reply]
-                                                                                   (if (sente/cb-success? edn-reply) 
-                                                                                     (println "Successful sente reply " edn-reply)
-                                                                                     (println "Error! " edn-reply))))))}
-                                                      "Send filter job")
-                                            (om/build alert-widget {} {}))))
-
+                        (g/row {}
+                               (om/build new-job-toolbar {} {}))
                         (g/row {} 
                                (g/col {:xs 4 :md 4}
                                       (om/build top-word-counts (:top-word-counts data) {}))
                                (g/col {:xs 4 :md 4} 
                                       (om/build top-hashtag-counts (:top-hashtag-counts data) {}))
                                (g/col {:xs 4 :md 4} (om/build jobs-list (:jobs data) {})))
-                        (g/row {:class "show-grid"}
+                        (g/row {}
                                (g/col {:xs 6 :md 8}
                                       (om/build timeline 
                                                 (:custom-filter-timeline data) 
@@ -246,8 +246,7 @@
                                (g/col {:xs 6 :md 8}
                                       (om/build timeline 
                                                 (:timeline data) 
-                                                {:opts {:timeline-ch (:timeline (om/get-shared owner :comms))} }))
-                               )))))
+                                                {:opts {:timeline-ch (:timeline (om/get-shared owner :comms))}}))))))
 
 (defn main []
   (om/root app 
