@@ -2,13 +2,13 @@
   (:require [clojure.core.async :as a :refer [go-loop pipe chan >!! <!! close!]]
             [clojure.data.fressian :as fressian]
             [clojure.core.match :as match :refer (match)]
-            [clojure.string :as s]
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
             [onyx.peer.task-lifecycle-extensions :as l-ext]
             [onyx.extensions :as extensions]
             [onyx.api]
             [onyx.plugin.core-async]
+            [onyx-timeline-example.onyx.functions]
             [lib-onyx.interval]))
 
 (def batch-size 50)

@@ -2,8 +2,8 @@
   (:require [clojure.data.fressian :as fressian]
             [clojure.string :as s]
             [clojure.tools.logging :as log]
-            [lib-onyx.interval]
-            [onyx.extensions :as extensions]))
+            [onyx.extensions :as extensions]
+            [lib-onyx.interval]))
 
 (defn into-words [s]
   (s/split s #"\s"))
