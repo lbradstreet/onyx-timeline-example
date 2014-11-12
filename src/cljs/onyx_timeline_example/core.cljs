@@ -13,13 +13,14 @@
             [taoensso.sente.packers.transit :as sente-transit]
             [cljs.core.async :as async :refer [<! >! chan put! alts! timeout]]))
 
-; Put channels in root shared rather than refer to def
 (def timeline-chan (chan))
 (def custom-filter-chan (chan))
 (def words-agg-chan (chan))
 (def hashtags-agg-chan (chan))
+(def jobs-chan (chan))
 
-(defonce app-state (atom {:top-word-counts {}
+(defonce app-state (atom {:jobs []
+                          :top-word-counts {}
                           :top-hashtag-counts {}
                           :custom-filter-timeline {:tweets []}
                           :timeline {:tweets []}}))
@@ -35,11 +36,12 @@
   (def chsk-state app-state))  ; Watchable, read-only atom
 
 (defn handle-payload [[msg-type contents]]
+  (println "Msg " msg-type contents)
   (match [msg-type contents]
-         [:onyx.job/started msg] (println "Onyx job started " msg)
-         [:onyx.job/list msg] (println "Onyx job list " msg)
+         [(:or :onyx.job/started
+               :onyx.job/list 
+               :onyx.job/done) msg] (put! jobs-chan [msg-type contents])
          [:onyx.job/start-failed msg] (println "Onyx job failed to start as: " msg)
-         [:onyx.job/done regex] (println "Onyx job done: " regex)
          [:tweet/new tweet] (put! timeline-chan tweet)
          [:tweet/filtered-tweet tweet] (put! custom-filter-chan tweet)
          [:agg/top-word-count counts] (put! words-agg-chan counts)
@@ -48,7 +50,12 @@
 
 (defn- event-handler [{:keys [event]}]
   (match event
-         [:chsk/state new-state] (print "Chsk state change:" new-state)
+         [:chsk/state new-state] 
+         (match [new-state]
+                [{:first-open? true}] 
+                (chsk-send! [:onyx.job/list])
+                :else 
+                (println "Unmatched state change: " new-state))
          [:chsk/recv payload] (handle-payload payload)
          :else (print "Unmatched event: %s" event)))
 
@@ -87,6 +94,37 @@
                               (d/tr {:key (key word-count)}
                                     (d/td (val word-count))
                                     (d/td (key word-count))))))}
+                  nil)))
+
+(defcomponent jobs-list [data owner]
+  (init-state  [_]
+              {:receive-chan (:jobs-chan (om/get-shared owner :comms))})
+  (will-mount [_]
+              (go-loop [] 
+                       ; Use alt for now, may have some other channels here in the future
+                       (alt!
+                         (om/get-state owner :receive-chan)
+                         ([[msg-type contents]] 
+                          (case msg-type
+                            :onyx.job/list (om/update! data contents)
+                            :onyx.job/done (om/transact! data [] (fn [jobs] (remove (partial = contents) jobs)))
+                            :onyx.job/started (om/transact! data [] (fn [jobs] (conj jobs contents))))))
+                       (recur)))
+  (render-state [_ _]
+                (p/panel
+                  {:header "Running filter jobs"
+                   :list-group 
+                   (table {:striped? true :bordered? true :condensed? true :hover? true}
+                          (d/thead
+                            (d/tr
+                              (d/th "UID")
+                              (d/th "Regex")))
+                          (d/tbody
+                            (map (fn [[uid regex]]
+                                   (d/tr {:key uid}
+                                         (d/td uid)
+                                         (d/td regex)))
+                                 data)))}
                   nil)))
 
 (defcomponent top-hashtag-counts [data owner]
@@ -161,7 +199,8 @@
 (defcomponent app [data owner]
   (did-mount [_]
              ; TODO: on render, adjust scroll position
-             (.bind (.-events js/twttr) "rendered" identity #_(fn [widget] (println "Created widget " (.-id widget)))))
+             ;(.bind (.-events js/twttr) "rendered" identity #_(fn [widget] (println "Created widget " (.-id widget))))
+             )
   (render-state [_ {:keys [regex-str]}]
                 (g/grid {}
                         (g/row {:class "show-grid grids-examples"}
@@ -178,10 +217,7 @@
                                                                                       (if (sente/cb-success? edn-reply) 
                                                                                         (println "Successful sente reply " edn-reply)
                                                                                         (println "Error! " edn-reply)))))}
-                                                           "Send filter job")
-
-                                                 (b/button {:on-click (fn [e] (chsk-send! [:onyx.job/list]))}
-                                                            "List jobs"))))
+                                                           "Send filter job"))))
                         (g/row {:class "show-grid"}
                                (g/col {:xs 6 :md 8}
                                       (om/build timeline 
@@ -193,7 +229,8 @@
                                                 {:opts {:timeline-ch (:timeline (om/get-shared owner :comms))} }))
                                (g/col {:xs 4 :md 4}
                                       (om/build top-word-counts (:top-word-counts data) {})
-                                      (om/build top-hashtag-counts (:top-hashtag-counts data) {}))))))
+                                      (om/build top-hashtag-counts (:top-hashtag-counts data) {})
+                                      (om/build jobs-list (:jobs data) {}))))))
 
 (defn main []
   (om/root app 
@@ -201,5 +238,6 @@
            {:target (. js/document (getElementById "app"))
             :shared {:comms {:timeline timeline-chan
                              :custom-filter custom-filter-chan
+                             :jobs-chan jobs-chan
                              :words-agg-chan words-agg-chan
                              :hashtags-agg-chan hashtags-agg-chan}}}))

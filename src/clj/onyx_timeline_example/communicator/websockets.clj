@@ -32,19 +32,19 @@
   (>!! command-ch [:scheduler/start-filter-job [regexp uid]])
   (reply-fn :success))
 
-(defn ev->cookie [ev-msg]
+(defn ev->session [ev-msg]
   (get-in ev-msg [:ring-req :cookies "ring-session" :value]))
 
 (defn make-handler [command-ch]
   (fn [{:keys [event ?reply-fn] :as ev-msg}]
     (match event
-           [:onyx.job/list] (>!! command-ch [:scheduler/list-jobs]) 
+           [:onyx.job/list] (>!! command-ch [:scheduler/list-jobs (vector (ev->session ev-msg))]) 
            [:onyx.job/start params] (start-job-handler ?reply-fn 
                                                        command-ch 
                                                        params 
                                                        (re-pattern (:regex-str params))
-                                                       (ev->cookie ev-msg))
-           [:chsk/uidport-close] (println "User " (ev->cookie ev-msg) " closed page. Can flush job?")
+                                                       (ev->session ev-msg))
+           [:chsk/uidport-close] (println "User " (ev->session ev-msg) " closed page. Can flush job?")
            :else (println "Got event " event))))
 
 (defn send-loop [channel f]
@@ -73,13 +73,11 @@
                                                  (swap! top-words merge t) num-shown)]
          [{:sente/uid uid :tweet-id id :twitter-user user}] [:tweet/filtered-tweet {:tweet-id id :twitter-user user}] 
          [{:tweet-id id :twitter-user user}] [:tweet/new {:tweet-id id :twitter-user user}] 
-         [{:onyx.job/done regex}] [:onyx.job/done (str regex)]
-         [{:onyx.job/started started}] [:onyx.job/started (str started)]
+         [{:onyx.job/done [uid regex]}] [:onyx.job/done [uid (str regex)]]
+         [{:onyx.job/started [uid regex]}] [:onyx.job/started [uid (str regex)]]
          [{:onyx.job/start-failed msg}] [:onyx.job/start-failed msg]
          [{:onyx.job/list coll}] [:onyx.job/list coll]
          :else (println "Couldn't match segment")))
-
-
 
 (defn send-stream [uids chsk-send! top-words top-hashtags]
   "deliver percolation matches to interested clients"

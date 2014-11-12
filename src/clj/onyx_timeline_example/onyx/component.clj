@@ -38,8 +38,8 @@
              (s/replace #"[,.:']+$" ""))})
 
 (defn update-trends 
-  "Maintains a rolling count of tokens (words, hashtags, etc)," 
-  " over the last period num token occurrences"
+  "Maintains a rolling count of tokens (words, hashtags, etc),
+  over the last period num token occurrences"
   [{:keys [tokens counts]} token period]
   (let [ts (conj tokens token)
         updated-count (inc (counts token 0))] 
@@ -334,6 +334,18 @@
    [:filter-by-regex :wrap-sente-user-info]
    [:wrap-sente-user-info :out]])
 
+(defn uid->public-uid [uid]
+  (->> uid 
+       str 
+       (take 5) 
+       (apply str)))
+
+(defn jobs->list-message [jobs uid]
+  {:sente/uid uid
+   :onyx.job/list (mapv (juxt (comp uid->public-uid :uid)
+                              (comp str :regex)) 
+                        (vals jobs))})
+
 (defn start-job! [onyx-connection peer-conf job-info catalog workflow]
   (let [jobs (:scheduler/jobs peer-conf)
         job-id (onyx.api/submit-job (:conn onyx-connection)
@@ -343,18 +355,23 @@
         ; is starved of peers, i.e. the new job
         onyx-peers (-> (new-onyx-peers peer-conf (:scheduler/num-peers-filter peer-conf))
                        (assoc :onyx-connection onyx-connection)
-                       component/start)]
+                       component/start)
+        public-job-info (vector (uid->public-uid (:uid job-info)) 
+                                (:regex job-info))]
     (swap! jobs assoc (:uid job-info) job-info)
-    (>!! (:timeline/output-ch peer-conf) {:onyx.job/started (:regex job-info)})
+    (>!! (:timeline/output-ch peer-conf) {:onyx.job/started public-job-info})
     (future (do @(onyx.api/await-job-completion (:conn onyx-connection) job-id)
-                (>!! (:timeline/output-ch peer-conf) {:onyx.job/done (:regex job-info)})
+                (>!! (:timeline/output-ch peer-conf) {:onyx.job/done public-job-info})
                 (swap! jobs dissoc (:uid job-info))
                 (component/stop onyx-peers)))))
 
-(defn jobs->list [jobs]
-  {:onyx.job/list (map (juxt (comp (partial take 5) str :uid) 
-                             (comp str :regex)) 
-                       (vals jobs))})
+
+; (defn build-filter-catalog [regex uid]
+;   (-> (zipmap (map :onyx/name catalog) catalog) 
+;       (merge {:in-take {:sente/uid uid}
+;               :wrap-sente-user-info {:sente/uid uid}
+;               :filter-by-regex {:timeline/regex regex}})
+;       vals))
 
 (defn build-filter-catalog [regex uid]
   (-> (zipmap (map :onyx/name catalog) catalog) 
@@ -379,17 +396,19 @@
       (go-loop []
                (let [msg (<!! cmd-ch)]
                  (match msg
-                        [:scheduler/list-jobs]
-                        (>!! (:timeline/output-ch peer-conf) (jobs->list @jobs))
+                        [:scheduler/list-jobs [uid]]
+                        (>!! (:timeline/output-ch peer-conf) (jobs->list-message @jobs uid))
 
                         [:scheduler/start-filter-job [regex uid]]
                         (cond (>= (count @jobs) (:scheduler/max-jobs peer-conf))
                               (>!! (:timeline/output-ch peer-conf) 
-                                   {:onyx.job/start-failed "Failed to start job as too many jobs are running"})
+                                   {:onyx.job/start-failed "Failed to start job as too many jobs are running"
+                                    :sente/uid uid})
 
                               (get @jobs uid)
                               (>!! (:timeline/output-ch peer-conf) 
-                                   {:onyx.job/start-failed "Failed to start job as you are already running a job."})
+                                   {:onyx.job/start-failed "Failed to start job as you are already running a job."
+                                    :sente/uid uid})
 
                               :else
                               (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
