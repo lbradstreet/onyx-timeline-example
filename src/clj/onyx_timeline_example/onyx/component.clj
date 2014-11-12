@@ -11,93 +11,6 @@
             [onyx.plugin.core-async]
             [lib-onyx.interval]))
 
-(defn into-words [s]
-  (clojure.string/split s #"\s"))
-
-(defn extract-tweet [segment]
-  {:tweet-id (str (:id segment))
-   :twitter-user (:screen_name (:user segment))
-   :tweet (:text segment)})
-
-(defn filter-by-regex [regex {:keys [tweet] :as segment}]
-  (if (re-find regex tweet) segment []))
-
-(defn extract-hashtags [{:keys [tweet]}]
-  (->> (into-words tweet)
-       (keep (partial re-matches #"#.*"))
-       (map (fn [hashtag] {:hashtag hashtag}))))
-
-(defn split-into-words [min-chars {:keys [tweet]}]
-  (->> (into-words tweet)
-       (filter (fn [word] (> (count word) min-chars)))
-       (map (fn [word] {:word word}))))
-
-(defn normalize-words [{:keys [word]}]
-  {:word (-> word 
-             s/lower-case
-             (s/replace #"[,.:']+$" ""))})
-
-(defn update-trends 
-  "Maintains a rolling count of tokens (words, hashtags, etc),
-  over the last period num token occurrences"
-  [{:keys [tokens counts]} token period]
-  (let [ts (conj tokens token)
-        updated-count (inc (counts token 0))] 
-    (if (> (count ts) period)
-      (let [removed-token (first ts)
-            removed-count (dec (counts removed-token))] 
-        {:tokens (subvec ts 1) 
-         :counts (assoc (if (zero? removed-count)
-                          (dissoc counts removed-token)
-                          (assoc counts removed-token removed-count))
-                        token
-                        updated-count)})
-      {:tokens ts
-       :counts (assoc counts token updated-count)})))
-
-(defn word-count [local-state trend-period exclude-hashtags? {:keys [word] :as segment}]
-  (if (and exclude-hashtags? (.startsWith word "#"))
-    []
-    (do (swap! local-state update-trends word trend-period)
-        [])))
-
-(defn hashtag-count [local-state trend-period {:keys [hashtag] :as segment}]
-  (swap! local-state update-trends hashtag trend-period)
-  [])
-
-(defn top-words [m]
-  (->> m
-       (into [])
-       (sort-by second)
-       (reverse)
-       (take 8)
-       (into {})))
-
-(defn log-and-purge-words [{:keys [onyx.core/queue] :as event}]
-  (let [result (top-words (:counts @(:timeline/word-count-state event)))
-        compressed-state (fressian/write {:top-words result})]
-    (let [session (extensions/create-tx-session queue)]
-      (doseq [queue-name (:onyx.core/egress-queues event)]
-        (let [producer (extensions/create-producer queue session queue-name)]
-          (extensions/produce-message queue producer session compressed-state)
-          (extensions/close-resource queue producer)))
-      (extensions/commit-tx queue session)
-      (extensions/close-resource queue session))))
-
-(defn log-and-purge-hashtags [{:keys [onyx.core/queue] :as event}]
-  (let [result (top-words (:counts @(:timeline/hashtag-count-state event)))
-        compressed-state (fressian/write {:top-hashtags result})
-        session (extensions/create-tx-session queue)]
-    (doseq [queue-name (:onyx.core/egress-queues event)]
-      (let [producer (extensions/create-producer queue session queue-name)]
-        (extensions/produce-message queue producer session compressed-state)
-        (extensions/close-resource queue producer)))
-      (extensions/commit-tx queue session)
-      (extensions/close-resource queue session)))
-
-(defn wrap-sente-user-info [user segment]
-  (assoc segment :sente/uid user))
-
 (def batch-size 50)
 
 (def batch-timeout 300)
@@ -113,6 +26,11 @@
    [:filter-by-regex :out]
    [:word-count :out]
    [:hashtag-count :out]])
+
+
+;;;;;;;;
+;;; Catalog
+;;;;;;;;
 
 (def catalog
   [{:onyx/name :in
@@ -134,14 +52,14 @@
     :onyx/doc "Reads counted number of segments from a core.async channel"}
 
    {:onyx/name :extract-tweet
-    :onyx/fn :onyx-timeline-example.onyx.component/extract-tweet
+    :onyx/fn :onyx-timeline-example.onyx.functions/extract-tweet
     :onyx/type :function
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :filter-by-regex
-    :onyx/fn :onyx-timeline-example.onyx.component/filter-by-regex
+    :onyx/fn :onyx-timeline-example.onyx.functions/filter-by-regex
     :onyx/type :function
     :onyx/consumption :concurrent
     :timeline/regex #"(?i).*(Halloween|Thanksgiving|Christmas).*"
@@ -149,14 +67,14 @@
     :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :extract-hashtags
-    :onyx/fn :onyx-timeline-example.onyx.component/extract-hashtags
+    :onyx/fn :onyx-timeline-example.onyx.functions/extract-hashtags
     :onyx/type :function
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :split-into-words
-    :onyx/fn :onyx-timeline-example.onyx.component/split-into-words
+    :onyx/fn :onyx-timeline-example.onyx.functions/split-into-words
     :onyx/type :function
     :onyx/consumption :concurrent
     :timeline.words/min-chars 3
@@ -164,7 +82,7 @@
     :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :normalize-words
-    :onyx/fn :onyx-timeline-example.onyx.component/normalize-words
+    :onyx/fn :onyx-timeline-example.onyx.functions/normalize-words
     :onyx/type :function
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size
@@ -172,7 +90,7 @@
 
    {:onyx/name :word-count
     :onyx/ident :lib-onyx.interval/recurring-action
-    :onyx/fn :onyx-timeline-example.onyx.component/word-count
+    :onyx/fn :onyx-timeline-example.onyx.functions/word-count
     :onyx/type :function
     :onyx/group-by-key :word
     :onyx/consumption :concurrent
@@ -185,7 +103,7 @@
 
    {:onyx/name :hashtag-count
     :onyx/ident :lib-onyx.interval/recurring-action
-    :onyx/fn :onyx-timeline-example.onyx.component/hashtag-count
+    :onyx/fn :onyx-timeline-example.onyx.functions/hashtag-count
     :onyx/type :function
     :onyx/group-by-key :hashtag
     :onyx/consumption :concurrent
@@ -196,7 +114,7 @@
     :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :wrap-sente-user-info
-    :onyx/fn :onyx-timeline-example.onyx.component/wrap-sente-user-info
+    :onyx/fn :onyx-timeline-example.onyx.functions/wrap-sente-user-info
     :onyx/type :function
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size
@@ -212,37 +130,9 @@
     :onyx/batch-timeout batch-timeout
     :onyx/doc "Writes segments to a core.async channel"}])
 
-(defrecord OnyxConnection [conf]
-  component/Lifecycle
-  (start [component]
-    (println "Starting Onyx Coordinator")
-    (let [conn (onyx.api/connect (:coordinator-type (:onyx conf))
-                                 (:coord (:onyx conf)))]
-      (assoc component :conn conn)))
-  (stop [component]
-    (println "Stopping Onyx Coordinator")
-    (let [{:keys [conn]} component]
-      (when conn (onyx.api/shutdown conn))
-      component)))
-
-(defn new-onyx-connection [conf] (map->OnyxConnection {:conf conf}))
-
-(defrecord OnyxPeers [peer-conf n]
-  component/Lifecycle
-  (start [{:keys [onyx-connection] :as component}]
-    (println "Starting Onyx Peers")
-    (let [v-peers (onyx.api/start-peers (:conn onyx-connection)
-                                        n 
-                                        peer-conf)]
-      (assoc component :v-peers v-peers)))
-  (stop [component]
-    (println "Stopping Onyx Peers")
-    (when-let [v-peers (:v-peers component)]
-      (doseq [{:keys [shutdown-fn]} v-peers]
-        (shutdown-fn)))
-    component))
-
-(defn new-onyx-peers [peer-conf n] (map->OnyxPeers {:peer-conf peer-conf :n n}))
+;;;;;;;;
+;;; Lifecycle Injections
+;;;;;;;;
 
 (defmethod l-ext/inject-lifecycle-resources :in
   [_ {:keys [onyx.core/peer-opts]}]
@@ -296,6 +186,42 @@
                deref
                (get-in [(:sente/uid task-map) :input-ch]))]
     {:core-async/in-chan in}))
+
+;;;;;;;;
+;;; Components
+;;;;;;;;
+
+(defrecord OnyxConnection [conf]
+  component/Lifecycle
+  (start [component]
+    (println "Starting Onyx Coordinator")
+    (let [conn (onyx.api/connect (:coordinator-type (:onyx conf))
+                                 (:coord (:onyx conf)))]
+      (assoc component :conn conn)))
+  (stop [component]
+    (println "Stopping Onyx Coordinator")
+    (let [{:keys [conn]} component]
+      (when conn (onyx.api/shutdown conn))
+      component)))
+
+(defn new-onyx-connection [conf] (map->OnyxConnection {:conf conf}))
+
+(defrecord OnyxPeers [peer-conf n]
+  component/Lifecycle
+  (start [{:keys [onyx-connection] :as component}]
+    (println "Starting Onyx Peers")
+    (let [v-peers (onyx.api/start-peers (:conn onyx-connection)
+                                        n 
+                                        peer-conf)]
+      (assoc component :v-peers v-peers)))
+  (stop [component]
+    (println "Stopping Onyx Peers")
+    (when-let [v-peers (:v-peers component)]
+      (doseq [{:keys [shutdown-fn]} v-peers]
+        (shutdown-fn)))
+    component))
+
+(defn new-onyx-peers [peer-conf n] (map->OnyxPeers {:peer-conf peer-conf :n n}))
 
 (defrecord OnyxJob [conf]
   component/Lifecycle
