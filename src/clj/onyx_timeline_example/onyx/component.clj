@@ -96,7 +96,7 @@
     :onyx/consumption :concurrent
     :timeline.words/exclude-hashtags? true
     :timeline.words/trend-period 10000
-    :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge-words
+    :lib-onyx.interval/fn :onyx-timeline-example.onyx.functions/log-and-purge-words
     :lib-onyx.interval/ms 3000
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
@@ -108,7 +108,7 @@
     :onyx/group-by-key :hashtag
     :onyx/consumption :concurrent
     :timeline.hashtags/trend-period 10000
-    :lib-onyx.interval/fn :onyx-timeline-example.onyx.component/log-and-purge-hashtags
+    :lib-onyx.interval/fn :onyx-timeline-example.onyx.functions/log-and-purge-hashtags
     :lib-onyx.interval/ms 5000
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}

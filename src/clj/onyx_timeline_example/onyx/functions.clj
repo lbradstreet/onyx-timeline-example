@@ -2,6 +2,7 @@
   (:require [clojure.data.fressian :as fressian]
             [clojure.string :as s]
             [clojure.tools.logging :as log]
+            [lib-onyx.interval]
             [onyx.extensions :as extensions]))
 
 (defn into-words [s]

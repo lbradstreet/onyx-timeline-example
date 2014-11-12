@@ -1,6 +1,6 @@
 (ns onyx-timeline-example.functions-test
   (:require [clojure.test :refer :all]
-            [onyx-timeline-example.onyx.component :as onyx]))
+            [onyx-timeline-example.onyx.functions :as onyx]))
 
 (deftest test-sentence-to-words
   (is (= ["Hi" "my" "name" "is" "Mike"]
