@@ -12,6 +12,7 @@
      (set-attr :class "is-dev")
      (prepend (html [:script {:type "text/javascript" :src "/js/out/goog/base.js"}]))
      (prepend (html [:script {:type "text/javascript" :src "/react/react.js"}]))
+     ;(prepend (html [:script {:type "text/javascript" :src "//platform.twitter.com/widgets.js"}]))
      (append  (html [:script {:type "text/javascript"} "goog.require('onyx_timeline_example.dev')"]))))
 
 (defn browser-repl []

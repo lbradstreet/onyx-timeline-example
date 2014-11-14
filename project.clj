@@ -54,8 +54,11 @@
                              :compiler {:output-to     "resources/public/js/app.js"
                                         :output-dir    "resources/public/js/out"
                                         :source-map    "resources/public/js/out.js.map"
-                                        :preamble      ["react/react.min.js"]
-                                        :externs       ["react/externs/react.js"]
+                                        :preamble      ["react/react.min.js"
+                                                        ;"public/twitter/widgets.js"
+                                                        ]
+                                        :externs       ["react/externs/react.js"
+                                                        "resources/public/twitter/widgets.js"]
                                         :optimizations :none
                                         :pretty-print  true}}}}
 
@@ -69,7 +72,7 @@
                    :cljsbuild {:builds {:app {:source-paths ["env/dev/cljs"]}}}}
 
              :uberjar {:hooks [leiningen.cljsbuild]
-                       :env {:production true}
+                       :env {:production true :is-dev false}
                        :omit-source true
                        :aot :all
                        :cljsbuild {:builds {:app

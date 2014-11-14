@@ -14,6 +14,8 @@
             [taoensso.sente.packers.transit :as sente-transit]
             [cljs.core.async :as async :refer [<! >! chan put! timeout]]))
 
+(enable-console-print!)
+
 (def timeline-chan (chan))
 (def custom-filter-chan (chan))
 (def words-agg-chan (chan))

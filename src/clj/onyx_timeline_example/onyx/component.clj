@@ -22,11 +22,11 @@
    [:split-into-words :normalize-words]
    [:filter-by-regex :extract-hashtags]
    [:normalize-words :word-count]
-   [:extract-hashtags :hashtag-count]
+   [:extract-hashtags :normalize-hashtags]
+   [:normalize-hashtags :hashtag-count]
    [:filter-by-regex :out]
    [:word-count :out]
    [:hashtag-count :out]])
-
 
 ;;;;;;;;
 ;;; Catalog
@@ -82,6 +82,13 @@
     :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :normalize-words
+    :onyx/fn :onyx-timeline-example.onyx.functions/normalize-words
+    :onyx/type :function
+    :onyx/consumption :concurrent
+    :onyx/batch-size batch-size
+    :onyx/batch-timeout batch-timeout}
+
+   {:onyx/name :normalize-hashtags
     :onyx/fn :onyx-timeline-example.onyx.functions/normalize-words
     :onyx/type :function
     :onyx/consumption :concurrent
