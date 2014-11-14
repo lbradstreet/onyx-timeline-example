@@ -92,7 +92,7 @@
     :onyx/batch-timeout batch-timeout}
 
    {:onyx/name :normalize-hashtags
-    :onyx/fn :onyx-timeline-example.onyx.functions/normalize-words
+    :onyx/fn :onyx-timeline-example.onyx.functions/normalize-hashtags
     :onyx/type :function
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size

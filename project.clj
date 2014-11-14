@@ -64,6 +64,7 @@
 
   :profiles {:dev {:repl-options {:init-ns onyx-timeline-example.server
                                   :nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
+                   :hooks [leiningen.cljsbuild]
                    :plugins [[lein-figwheel "0.1.4-SNAPSHOT"]]
                    :figwheel {:http-server-root "public"
                               :port 3449

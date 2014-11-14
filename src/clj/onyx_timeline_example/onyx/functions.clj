@@ -26,10 +26,16 @@
        (filter (fn [word] (> (count word) min-chars)))
        (map (fn [word] {:word word}))))
 
+(defn normalize-token [token]
+  (-> token
+      s/lower-case
+      (s/replace #"[,.:']+$" "")))
+
 (defn normalize-words [{:keys [word]}]
-  {:word (-> word 
-             s/lower-case
-             (s/replace #"[,.:']+$" ""))})
+  {:word (normalize-token word)})
+
+(defn normalize-hashtags [{:keys [hashtag]}]
+  {:hashtag (normalize-token hashtag)})
 
 (defn update-trends 
   "Maintains a rolling count of tokens (words, hashtags, etc),
