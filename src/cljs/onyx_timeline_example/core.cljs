@@ -37,7 +37,7 @@
   (def chsk       chsk)
   (def ch-chsk    ch-recv) ; ChannelSocket's receive channel
   (def chsk-send! send-fn) ; ChannelSocket's send API fn
-  (def chsk-state app-state))  ; Watchable, read-only atom
+  (def chsk-state state))  ; Watchable, read-only atom
 
 (defn handle-payload [[msg-type contents]]
   (match [msg-type contents]

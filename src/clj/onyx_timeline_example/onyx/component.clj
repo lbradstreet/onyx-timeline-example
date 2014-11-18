@@ -45,7 +45,7 @@
     (when-let [v-peers (:v-peers component)]
       (doseq [{:keys [shutdown-fn]} v-peers]
         (shutdown-fn)))
-    component))
+    (assoc component :v-peers nil)))
 
 (defn new-onyx-peers [peer-conf n] (map->OnyxPeers {:peer-conf peer-conf :n n}))
 
