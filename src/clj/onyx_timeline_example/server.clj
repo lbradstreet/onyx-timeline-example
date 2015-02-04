@@ -29,7 +29,7 @@
                                      :async? false
                                      :max-message-per-msecs nil
                                      :fn rotor/appender-fn}}
-                 :shared-appender-config {:rotor {:path "timeline.log" 
+                 :shared-appender-config {:rotor {:path "timeline.log"
                                                   :max-size (* 512 10240) :backlog 5}}})
 
 (def conf {:port 8888
@@ -63,7 +63,7 @@
   (component/system-map
    :twitter (twitter/new-tweet-stream conf)
    :onyx-connection (component/using (onyx/new-onyx-connection conf) [:twitter])
-   :onyx-peers (component/using (onyx/new-onyx-peers (:peer (:onyx conf)) 
+   :onyx-peers (component/using (onyx/new-onyx-peers (:peer (:onyx conf))
                                                      (:num-peers (:onyx conf))) [:onyx-connection])
    :onyx-scheduler (component/using (onyx/new-onyx-scheduler conf) [:onyx-connection])
    :onyx-job (component/using (onyx/new-onyx-job conf) [:onyx-connection])

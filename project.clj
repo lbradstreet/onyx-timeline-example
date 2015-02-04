@@ -62,6 +62,11 @@
                                         :optimizations :none
                                         :pretty-print  true}}}}
 
+  :env {:twitter-consumer-key ""
+        :twitter-consumer-secret ""
+        :twitter-token ""
+        :twitter-secret ""}
+
   :profiles {:dev {:repl-options {:init-ns onyx-timeline-example.server
                                   :nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
                    :hooks [leiningen.cljsbuild]
