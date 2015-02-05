@@ -3,9 +3,21 @@
 ## Configuration
 
 You'll need to create a Twitter application and then put it's consumer key,
-consumer secret and your access token and secret in `project.clj` in `:env`
-map. You can obtain them at `https://apps.twitter.com/app/...your app
-id.../keys` (you obviously have to register an app before you obtain them).
+consumer secret and your access token and secret in your user profiles.clj
+under the `{:user {:env {}}` map. 
+e.g.
+
+```
+{:user {:env {:twitter-consumer-secret "XXX"
+              :twitter-consumer-key "XXX"
+              :twitter-token "XXX"
+	      :twitter-secret "XXX"}
+```
+
+Alternatively you can set environment variables in the form of `TWITTER_CONSUMER_SECRET`.
+
+You can obtain them at `https://apps.twitter.com/app/...your app id.../keys`
+(you obviously have to register an app before you obtain them).
 
 ## Development
 

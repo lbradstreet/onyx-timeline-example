@@ -104,6 +104,7 @@
                        component/start)
         public-job-info (vector (uid->public-uid (:uid job-info)) 
                                 (:regex job-info))]
+    (println "started job " job-id)
     (swap! jobs assoc (:uid job-info) job-info)
     (>!! (:timeline/output-ch peer-conf) {:onyx.job/started public-job-info})
     (future (do @(onyx.api/await-job-completion (:conn onyx-connection) job-id)
@@ -126,7 +127,7 @@
           cmd-ch (:scheduler/command-ch peer-conf)
           jobs (:scheduler/jobs peer-conf)]
       (go-loop []
-               (let [msg (<!! cmd-ch)]
+               (when-let [msg (<!! cmd-ch)]
                  (match msg
                         [:scheduler/list-jobs [uid]]
                         (>!! (:timeline/output-ch peer-conf) (jobs->list-message @jobs uid))
