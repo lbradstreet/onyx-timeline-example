@@ -1,5 +1,11 @@
 # onyx-timeline-example
 
+## Configuration
+
+You'll need to create a Twitter application and then put it's consumer key,
+consumer secret and your access token and secret in `project.clj` in `:env`
+map. You can obtain them at `https://apps.twitter.com/app/...your app
+id.../keys` (you obviously have to register an app before you obtain them).
 
 ## Development
 
@@ -10,11 +16,11 @@ CIDER is up to date).
 In the REPL do
 
 ```clojure
-(run)
+(go)
 (browser-repl)
 ```
 
-The call to `(run)` does two things, it starts the webserver at port
+The call to `(go)` does two things, it starts the webserver at port
 10555, and also the Figwheel server which takes care of live reloading
 ClojureScript code and CSS. Give them some time to start.
 
@@ -26,7 +32,7 @@ When you see the line `Successfully compiled "resources/public/app.js"
 in 21.36 seconds.`, you're ready to go. Browse to
 `http://localhost:10555` and enjoy.
 
-**Attention: It is not longer needed to run `lein fighwheel`
+**Attention: It is not longer needed to run `lein figwheel`
   separately. This is now taken care of behind the scenes**
 
 ## Trying it out
