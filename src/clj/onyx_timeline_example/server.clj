@@ -4,6 +4,7 @@
             [clojure.edn :as edn]
             [clojure.tools.logging :as log]
             [taoensso.timbre.appenders.rotor :as rotor]
+            [onyx.system :as s]
             [onyx-timeline-example.communicator.websockets :as web]
             [onyx-timeline-example.communicator.component :as comm]
             [onyx-timeline-example.communicator.twitter :as twitter]
@@ -33,19 +34,18 @@
                                                   :max-size (* 512 10240) :backlog 5}}})
 
 (def conf {:port 8888
-           :onyx {:coord {:hornetq/mode :vm ;; Run HornetQ inside the VM for convenience
-                          :hornetq/server? true
-                          :hornetq.server/type :vm
-                          :zookeeper/address "127.0.0.1:2185"
-                          :zookeeper/server? true ;; Run ZK inside the VM for convenience
-                          :zookeeper.server/port 2185
-                          :onyx.log/config log-config
-                          :onyx/id onyx-id
-                          :onyx.coordinator/revoke-delay 5000}
-                  :peer {:hornetq/mode :vm
-                         :zookeeper/address "127.0.0.1:2185"
-                         :onyx/id onyx-id
+           :onyx {:env {:hornetq/mode :vm
+                        :hornetq.server/type :vm
+                        :zookeeper/address "127.0.0.1:2185"
+                        :zookeeper/server? true
+                        :zookeeper.server/port 2185
+                        :onyx/id onyx-id
+                        :onyx.peer/job-scheduler :onyx.job-scheduler/round-robin}
+                  :peer {:onyx/id onyx-id
                          :onyx.log/config log-config
+                         :onyx.peer/job-scheduler :onyx.job-scheduler/round-robin
+                         :hornetq/mode :vm
+                         :zookeeper/address "127.0.0.1:2185"
                          :scheduler/max-jobs 5
                          :scheduler/num-peers-filter 10
                          :scheduler/jobs (atom {})
@@ -54,19 +54,20 @@
                          :timeline/input-ch input-ch
                          :timeline/input-ch-mult (mult input-ch)
                          :timeline/output-ch output-ch}
-                  :num-peers 20
-                  :coordinator-type :memory}})
+                  :num-peers 20}})
 
 (defn get-system [conf]
   "Create system by wiring individual components so that component/start
   will bring up the individual components in the correct order."
   (component/system-map
    :twitter (twitter/new-tweet-stream conf)
-   :onyx-connection (component/using (onyx/new-onyx-connection conf) [:twitter])
+   ;:onyx-connection (component/using (onyx/new-onyx-connection conf) [:twitter])
+   ; FIXME: don't reuse peer map so blatantly for env
+   :onyx-env (component/using (s/onyx-development-env (:env (:onyx conf))) [:twitter])
    :onyx-peers (component/using (onyx/new-onyx-peers (:peer (:onyx conf))
-                                                     (:num-peers (:onyx conf))) [:onyx-connection])
-   :onyx-scheduler (component/using (onyx/new-onyx-scheduler conf) [:onyx-connection])
-   :onyx-job (component/using (onyx/new-onyx-job conf) [:onyx-connection])
+                                                     (:num-peers (:onyx conf))) [:onyx-env])
+   :onyx-scheduler (component/using (onyx/new-onyx-scheduler conf) [:onyx-env])
+   :onyx-job (component/using (onyx/new-onyx-job (:peer (:onyx conf))) [:onyx-env])
    :web (web/new-web-state)
    :comm (component/using (comm/new-sente-communicator) [:web :onyx-scheduler])
    :http (component/using (http/new-http-server conf) [:comm])

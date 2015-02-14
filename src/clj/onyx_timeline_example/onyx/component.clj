@@ -17,49 +17,50 @@
 ;;; Components
 ;;;;;;;;
 
-(defrecord OnyxConnection [conf]
+; (defrecord OnyxConnection [conf]
+;   component/Lifecycle
+;   (start [component]
+;     (println "Starting Onyx Coordinator")
+;     (let [conn (onyx.api/connect (:coordinator-type (:onyx conf))
+;                                  (:coord (:onyx conf)))]
+;       (assoc component :conn conn)))
+;   (stop [component]
+;     (println "Stopping Onyx Coordinator")
+;     (let [{:keys [conn]} component]
+;       (when conn (onyx.api/shutdown conn))
+;       component)))
+
+;(defn new-onyx-env [conf] (map->OnyxConnection {:conf conf}))
+
+(defrecord OnyxPeers [config n]
   component/Lifecycle
+
   (start [component]
-    (println "Starting Onyx Coordinator")
-    (let [conn (onyx.api/connect (:coordinator-type (:onyx conf))
-                                 (:coord (:onyx conf)))]
-      (assoc component :conn conn)))
+    (println "Starting Virtual Peers")
+    (assoc component :peers (onyx.api/start-peers! n config)))
+
   (stop [component]
-    (println "Stopping Onyx Coordinator")
-    (let [{:keys [conn]} component]
-      (when conn (onyx.api/shutdown conn))
-      component)))
+    (println "Stopping Virtual Peers")
+    (doseq [peer (:peers component)]
+      (onyx.api/shutdown-peer peer))
+    component))
 
-(defn new-onyx-connection [conf] (map->OnyxConnection {:conf conf}))
 
-(defrecord OnyxPeers [peer-conf n]
-  component/Lifecycle
-  (start [{:keys [onyx-connection] :as component}]
-    (println "Starting Onyx Peers")
-    (let [v-peers (onyx.api/start-peers (:conn onyx-connection)
-                                        n 
-                                        peer-conf)]
-      (assoc component :v-peers v-peers)))
-  (stop [component]
-    (println "Stopping Onyx Peers")
-    (when-let [v-peers (:v-peers component)]
-      (doseq [{:keys [shutdown-fn]} v-peers]
-        (shutdown-fn)))
-    (assoc component :v-peers nil)))
-
-(defn new-onyx-peers [peer-conf n] (map->OnyxPeers {:peer-conf peer-conf :n n}))
+(defn new-onyx-peers [config n] (map->OnyxPeers {:config config :n n}))
 
 (defrecord OnyxJob [conf]
   component/Lifecycle
-  (start [{:keys [onyx-connection] :as component}]
+  (start [{:keys [onyx-env] :as component}]
     (println "Starting Onyx Job")
-    (let [job-id (onyx.api/submit-job (:conn onyx-connection)
-                                      {:catalog wf/catalog :workflow wf/workflow})]
+    (let [job-id (onyx.api/submit-job conf
+                                      {:catalog wf/catalog 
+                                       :workflow wf/workflow
+                                       :task-scheduler :onyx.task-scheduler/round-robin})]
       (assoc component :job-id job-id)))
   (stop [component]
     (println "Stopping Onyx Job")
     ; Need to fix this to put :done on the in chan that is tapped to
-    (>!! (:timeline/input-ch (:peer (:onyx conf))) :done)
+    (>!! (:timeline/input-ch (:peer conf)) :done)
     component))
 
 (defn new-onyx-job [conf] (map->OnyxJob {:conf conf}))
@@ -92,22 +93,21 @@
                               (comp str :regex)) 
                         (vals jobs))})
 
-(defn start-job! [onyx-connection peer-conf job-info catalog workflow]
+(defn start-job! [peer-conf job-info catalog workflow]
   (let [jobs (:scheduler/jobs peer-conf)
-        job-id (onyx.api/submit-job (:conn onyx-connection)
-                                    {:catalog catalog :workflow workflow})
+        job-id (onyx.api/submit-job peer-conf
+                                    {:catalog catalog :workflow workflow
+                                     :task-scheduler :onyx.task-scheduler/round-robin})
         ; the common timeline will be hogging all of the peers
         ; so we need to stand up new peers which will be allocated any job that
         ; is starved of peers, i.e. the new job
-        onyx-peers (-> (new-onyx-peers peer-conf (:scheduler/num-peers-filter peer-conf))
-                       (assoc :onyx-connection onyx-connection)
-                       component/start)
+        onyx-peers (component/start (new-onyx-peers peer-conf (:scheduler/num-peers-filter peer-conf)))
         public-job-info (vector (uid->public-uid (:uid job-info)) 
                                 (:regex job-info))]
     (println "started job " job-id)
     (swap! jobs assoc (:uid job-info) job-info)
     (>!! (:timeline/output-ch peer-conf) {:onyx.job/started public-job-info})
-    (future (do @(onyx.api/await-job-completion (:conn onyx-connection) job-id)
+    (future (do (onyx.api/await-job-completion peer-conf job-id)
                 (>!! (:timeline/output-ch peer-conf) {:onyx.job/done public-job-info})
                 (swap! jobs dissoc (:uid job-info))
                 (component/stop onyx-peers)))))
@@ -121,7 +121,7 @@
 
 (defrecord OnyxScheduler [conf]
   component/Lifecycle
-  (start [{:keys [onyx-connection] :as component}]
+  (start [{:keys [onyx-env] :as component}]
     (println "Starting Onyx Scheduler")
     (let [peer-conf (:peer (:onyx conf))
           cmd-ch (:scheduler/command-ch peer-conf)
@@ -146,8 +146,7 @@
                               :else
                               (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-conf) (chan))
                                     task-input-ch (pipe-input-take timeline-tap (:user-filter/num-tweets peer-conf))]
-                                (start-job! onyx-connection 
-                                            peer-conf 
+                                (start-job! peer-conf 
                                             {:input-ch task-input-ch :regex regex :uid uid}
                                             (build-filter-catalog wf/catalog regex uid) 
                                             wf/client-workflow)))) 

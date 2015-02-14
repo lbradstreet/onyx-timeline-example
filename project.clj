@@ -42,7 +42,7 @@
                  [racehub/om-bootstrap "0.4.0" :exclusions [om]]
                  [prismatic/om-tools "0.3.10" :exclusions [om]]]
 
-  :plugins [[lein-cljsbuild "1.0.3"]
+  :plugins [[lein-cljsbuild "1.0.4"]
             [lein-environ "1.0.0"]]
 
   :main onyx-timeline-example.server
@@ -62,11 +62,6 @@
                                                         "resources/public/twitter/widgets.js"]
                                         :optimizations :none
                                         :pretty-print  true}}}}
-
-  :env {:twitter-consumer-key ""
-        :twitter-consumer-secret ""
-        :twitter-token ""
-        :twitter-secret ""}
 
   :profiles {:dev {:repl-options {:init-ns onyx-timeline-example.server
                                   :nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}

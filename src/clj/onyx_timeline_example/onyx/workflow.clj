@@ -78,7 +78,7 @@
     :onyx/fn :onyx-timeline-example.onyx.functions/filter-by-regex
     :onyx/type :function
     :onyx/consumption :concurrent
-    :timeline/regex #"(?i).*(Halloween|Thanksgiving|Christmas).*"
+    :timeline/regex #"(?i).*(Halloween|Thanksgiving|Christmas|CNY|Valentines).*"
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 

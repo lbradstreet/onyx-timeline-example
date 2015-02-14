@@ -92,7 +92,7 @@
                               (d/th "Word")))
                           (d/tbody
                             (for [word-count (reverse (sort-by val data))]
-                              (d/tr {:key (key word-count)}
+                              (d/tr {:key (str (key word-count))}
                                     (d/td (val word-count))
                                     (d/td (key word-count))))))}
                   nil)))
@@ -119,7 +119,7 @@
                               (d/th "Regex")))
                           (d/tbody
                             (map (fn [[uid regex]]
-                                   (d/tr {:key uid}
+                                   (d/tr {:key (str uid)}
                                          (d/td uid)
                                          (d/td regex)))
                                  data)))}
@@ -144,7 +144,7 @@
                               (d/th "Hashtag")))
                           (d/tbody
                             (for [word-count (reverse (sort-by val data))]
-                              (d/tr {:key (key word-count)}
+                              (d/tr {:key (str (key word-count))}
                                     (d/td (val word-count))
                                     (d/td (key word-count))))))}
                   nil)))
@@ -198,12 +198,14 @@
                                       :style {:overflow-y "scroll"
                                               :height 800}}
                                      (for [tweet (:tweets data)]
-                                       (d/li {:key (:tweet-id tweet)
+                                       (d/li {:key (str (:tweet-id tweet))
                                               :class "list-group-item"}
                                              (om/build tweet-widget tweet {}))))}
                   nil)))
 
 (defcomponent new-job-toolbar [data owner]
+  (init-state [_]
+              {:regex-str ""})
   (render-state [_ {:keys [regex-str]}]
           (b/toolbar {} 
                      (let [regex-entered? (not-empty regex-str)]
@@ -215,11 +217,11 @@
                                         :ref "input"
                                         :feedback true
                                         :bs-style (if regex-entered? "success" "error")
+                                        :value regex-str
                                         :on-change (fn [e] (om/set-state! owner :regex-str (.. e -target -value)))})
                               (b/button {:on-click (fn [e] 
                                                      (when regex-entered?
-                                                       (set! (.-value (om/get-node owner "input")))
-                                                       (om/set-state! owner :regex-str nil)
+                                                       (om/set-state! owner :regex-str "")
                                                        (chsk-send! [:onyx.job/start {:regex-str regex-str}] 
                                                                    8000 
                                                                    (fn [edn-reply]
@@ -241,11 +243,11 @@
                                       (om/build top-hashtag-counts (:top-hashtag-counts data) {}))
                                (g/col {:xs 4 :md 4} (om/build jobs-list (:jobs data) {})))
                         (g/row {}
-                               (g/col {:xs 6 :md 8}
+                               (g/col {:xs 6 :md 4}
                                       (om/build timeline 
                                                 (:custom-filter-timeline data) 
                                                 {:opts {:timeline-ch (:custom-filter (om/get-shared owner :comms))}}))
-                               (g/col {:xs 6 :md 8}
+                               (g/col {:xs 6 :md 4}
                                       (om/build timeline 
                                                 (:timeline data) 
                                                 {:opts {:timeline-ch (:timeline (om/get-shared owner :comms))}}))))))
