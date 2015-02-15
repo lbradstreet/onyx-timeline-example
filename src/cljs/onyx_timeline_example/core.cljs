@@ -1,6 +1,5 @@
 (ns onyx-timeline-example.core
-  (:require-macros [cljs.core.match.macros :refer (match)]
-                   [cljs.core.async.macros :refer [go-loop go alt!]])
+  (:require-macros [cljs.core.async.macros :refer [go-loop go alt!]])
   (:require [om.core :as om :include-macros true]
             [om-bootstrap.panel :as p]
             [om-bootstrap.random :as r]
@@ -10,6 +9,7 @@
             [om-bootstrap.grid :as g]
             [om-tools.dom :as d :include-macros true]
             [om-tools.core :refer-macros [defcomponent]]
+            [cljs.core.match :refer-macros [match]]
             [taoensso.sente  :as sente  :refer (cb-success?)]
             [taoensso.sente.packers.transit :as sente-transit]
             [cljs.core.async :as async :refer [<! >! chan put! timeout]]))

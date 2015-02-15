@@ -13,7 +13,7 @@
                  [prismatic/schema "0.3.7"]
                  [org.clojure/clojurescript "0.0-2850"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
-                 [org.clojure/core.match "0.2.2"]
+                 [org.clojure/core.match "0.3.0-alpha4"]
                  [org.clojure/tools.logging  "0.3.1"]
                  [ring/ring-defaults  "0.1.4"]
                  [com.cognitect/transit-clj "0.8.259"]
