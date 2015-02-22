@@ -55,7 +55,6 @@
   will bring up the individual components in the correct order."
   (component/system-map
    :twitter (twitter/new-tweet-stream conf)
-   ; FIXME: don't reuse peer map so blatantly for env
    :onyx-env (component/using (s/onyx-development-env (:env (:onyx conf))) [:twitter])
    :onyx-peers (component/using (onyx/new-onyx-peers (:peer (:onyx conf))
                                                      (:num-peers (:onyx conf))) [:onyx-env])

@@ -26,15 +26,14 @@
     (println "Stopping Virtual Peers")
     (doseq [peer (:peers component)]
       (onyx.api/shutdown-peer peer))
-    component))
-
+    (assoc component :peers)))
 
 (defn new-onyx-peers [config n] (map->OnyxPeers {:config config :n n}))
 
 (defrecord OnyxJob [peer-conf]
   component/Lifecycle
   (start [{:keys [onyx-env] :as component}]
-    (println "Starting Onyx Job " " peer conf " peer-conf)
+    (println "Starting Onyx Job")
     (let [job-id (onyx.api/submit-job peer-conf
                                       {:catalog wf/catalog 
                                        :workflow wf/workflow
@@ -42,7 +41,6 @@
       (assoc component :job-id job-id)))
   (stop [{:keys [onyx-env] :as component}]
     (println "Stopping Onyx Job")
-    (println "peer conf " peer-conf)
     (>!! (:timeline/input-ch peer-conf) :done)
     component))
 

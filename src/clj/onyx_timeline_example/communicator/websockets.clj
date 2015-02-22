@@ -55,7 +55,6 @@
 (def num-shown 8)
 
 (defn segment->msg [segment top-words top-hashtags]
-  (println "Got segment " segment)
   (match [segment]
          [:done] nil
          [{:top-hashtags t}] [:agg/top-hashtag-count (top->displayed-trend 
