@@ -1,7 +1,7 @@
 (ns onyx-timeline-example.http.component
   (:gen-class)
   (:require
-    [onyx-timeline-example.dev :refer [is-dev? inject-devmode-html browser-repl start-figwheel]]
+    [onyx-timeline-example.dev :refer [is-dev? inject-devmode-html]]
     [clojure.tools.logging :as log]
     [org.httpkit.server :as http-kit-server]
     [clojure.java.io :as io]

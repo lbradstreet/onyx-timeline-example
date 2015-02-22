@@ -28,24 +28,14 @@
     (log/info "Connected:" (:remote-addr req) uid)
     uid))
 
-(defn start-job-handler [reply-fn command-ch params regexp uid]
-  (>!! command-ch [:scheduler/start-filter-job [regexp uid]])
-  (reply-fn :success))
-
 (defn ev->session [ev-msg]
   (get-in ev-msg [:ring-req :cookies "ring-session" :value]))
 
-(defn make-handler [command-ch]
+(defn make-handler []
   (fn [{:keys [event ?reply-fn] :as ev-msg}]
     (match event
-           [:onyx.job/list] (>!! command-ch [:scheduler/list-jobs (vector (ev->session ev-msg))]) 
-           [:onyx.job/start params] (start-job-handler ?reply-fn 
-                                                       command-ch 
-                                                       params 
-                                                       (re-pattern (:regex-str params))
-                                                       (ev->session ev-msg))
-           [:chsk/uidport-close] (println "User " (ev->session ev-msg) " closed page. Can flush job?")
-           :else (println "Got event " event))))
+           [:chsk/uidport-close] (println "User " (ev->session ev-msg) " closed session.")
+           :else (println "Received event " event))))
 
 (defn send-loop [channel f]
   "run loop, call f with message on channel"
@@ -71,20 +61,16 @@
                                                        (swap! top-hashtags merge t) num-shown)]
          [{:top-words t}] [:agg/top-word-count (top->displayed-trend 
                                                  (swap! top-words merge t) num-shown)]
-         [{:sente/uid uid :tweet-id id :twitter-user user}] [:tweet/filtered-tweet {:tweet-id id :twitter-user user}] 
          [{:tweet-id id :twitter-user user}] [:tweet/new {:tweet-id id :twitter-user user}] 
-         [{:onyx.job/done [uid regex]}] [:onyx.job/done [uid (str regex)]]
-         [{:onyx.job/started [uid regex]}] [:onyx.job/started [uid (str regex)]]
-         [{:onyx.job/start-failed msg}] [:onyx.job/start-failed msg]
-         [{:onyx.job/list coll}] [:onyx.job/list coll]
          :else (println "Couldn't match segment")))
 
-(defn send-stream [uids chsk-send! top-words top-hashtags]
+(defn send-stream 
   "deliver percolation matches to interested clients"
+  [uids chsk-send! top-words top-hashtags]
   (fn [segment]
     (let [user (:sente/uid segment)] 
       (doseq [uid (cond (nil? user) (:any @uids) 
                         (= :any user) (:any @uids)      
                         :else (list user))]
-      (when-let [msg (segment->msg segment top-words top-hashtags)]
-        (chsk-send! uid msg))))))
+        (when-let [msg (segment->msg segment top-words top-hashtags)]
+          (chsk-send! uid msg))))))

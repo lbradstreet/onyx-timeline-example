@@ -55,13 +55,19 @@
       {:tokens ts
        :counts (assoc counts token updated-count)})))
 
-(defn word-count [local-state trend-period exclude-hashtags? {:keys [word] :as segment}]
+(defn word-count 
+  "Updates word count map in atom. Does not return any segments.
+  These are manually written to the queue by log-and-purge-words"
+  [local-state trend-period exclude-hashtags? {:keys [word] :as segment}]
   (if (and exclude-hashtags? (.startsWith word "#"))
     []
     (do (swap! local-state update-trends word trend-period)
         [])))
 
-(defn hashtag-count [local-state trend-period {:keys [hashtag] :as segment}]
+(defn hashtag-count 
+  "Updates hashtag count map in atom. Does not return any segments.
+  These are manually written to the queue by log-and-purge-words"
+  [local-state trend-period {:keys [hashtag] :as segment}]
   (swap! local-state update-trends hashtag trend-period)
   [])
 
@@ -77,7 +83,7 @@
   (let [result (top-words (:counts @(:timeline/word-count-state event)))
         compressed-state (fressian/write {:top-words result})]
     (let [session (extensions/create-tx-session queue)]
-      (doseq [queue-name (:onyx.core/egress-queues event)]
+      (doseq [queue-name (vals (:onyx.core/egress-queues event))]
         (let [producer (extensions/create-producer queue session queue-name)]
           (extensions/produce-message queue producer session compressed-state)
           (extensions/close-resource queue producer)))
@@ -88,12 +94,9 @@
   (let [result (top-words (:counts @(:timeline/hashtag-count-state event)))
         compressed-state (fressian/write {:top-hashtags result})
         session (extensions/create-tx-session queue)]
-    (doseq [queue-name (:onyx.core/egress-queues event)]
+    (doseq [queue-name (vals (:onyx.core/egress-queues event))]
       (let [producer (extensions/create-producer queue session queue-name)]
         (extensions/produce-message queue producer session compressed-state)
         (extensions/close-resource queue producer)))
       (extensions/commit-tx queue session)
       (extensions/close-resource queue session)))
-
-(defn wrap-sente-user-info [user segment]
-  (assoc segment :sente/uid user))
