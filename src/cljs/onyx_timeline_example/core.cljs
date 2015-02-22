@@ -157,7 +157,7 @@
                                (g/col {:xs 6 :md 4} 
                                       (om/build top-hashtag-counts (:top-hashtag-counts data) {})))
                         (g/row {}
-                               (g/col {:xs 12 :md 4}
+                               (g/col {:xs 12}
                                       (om/build timeline 
                                                 (:timeline data) 
                                                 {:opts {:timeline-ch (:timeline (om/get-shared owner :comms))}}))))))
