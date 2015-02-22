@@ -26,7 +26,7 @@
     (println "Stopping Virtual Peers")
     (doseq [peer (:peers component)]
       (onyx.api/shutdown-peer peer))
-    (assoc component :peers)))
+    (dissoc component :peers)))
 
 (defn new-onyx-peers [config n] (map->OnyxPeers {:config config :n n}))
 
