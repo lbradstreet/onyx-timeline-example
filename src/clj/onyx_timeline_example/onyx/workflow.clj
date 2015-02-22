@@ -25,17 +25,6 @@
    [:word-count :out]
    [:hashtag-count :out]])
 
-; (def workflow-alt
-;   {:in #{:extract-tweet}
-;    :extract-tweet #{:filter-by-regex}
-;    :filter-by-regex #{:split-into-words :extract-hashtags :out}
-;    :split-into-words #{:normalize-words}
-;    :normalize-words #{:word-count}
-;    :normalize-hashtags #{:hashtag-count}
-;    :extract-hashtags #{:normalize-hashtags}
-;    :word-count #{:out}
-;    :hashtag-count #{:out}})
-
 ;;;;;;;;
 ;;; Catalog
 ;;;;;;;;
@@ -61,7 +50,7 @@
     :onyx/fn :onyx-timeline-example.onyx.functions/filter-by-regex
     :onyx/type :function
     :onyx/consumption :concurrent
-    :timeline/regex #"(?i).*(Halloween|Thanksgiving|Christmas|CNY|Valentines).*"
+    :timeline/regex #"(?i).*(Halloween|Thanksgiving|Christmas|CNY|Valentines|Public Holiday).*"
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
