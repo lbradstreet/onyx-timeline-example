@@ -13,15 +13,15 @@
                  [org.clojure/clojurescript "0.0-2850"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [org.clojure/core.match "0.3.0-alpha4"]
-                 [org.clojure/tools.logging  "0.3.1"]
+                 [org.clojure/tools.logging "0.3.1"]
                  [prismatic/schema "0.3.7"]
-                 [org.slf4j/slf4j-simple "1.7.10"]
+                 ;[org.slf4j/slf4j-simple "1.7.10"]
                  [com.twitter/hbc-core "2.2.0"
                   :exclusions [commons-codec
                                com.google.guava/guava
                                org.apache.httpcomponents/httpclient]]
                  [potemkin "0.3.11"]
-                 [com.mdrogalis/onyx "0.5.1"]
+                 [com.mdrogalis/onyx "0.5.2"]
                  [com.mdrogalis/onyx-core-async "0.5.0"]
                  [com.mdrogalis/lib-onyx "0.5.0"]
 
@@ -35,6 +35,9 @@
                  [compojure "1.3.1"]
                  [enlive "1.1.5"]
                  [ring/ring-defaults  "0.1.4"]
+
+                 ; Eliminates schema issue. Remove in the future.
+                 [potemkin "0.3.11"]
 
                  [org.omcljs/om "0.8.8"]
                  [racehub/om-bootstrap "0.4.0" :exclusions [om]]
