@@ -12,8 +12,6 @@
 
 (def batch-timeout 300)
 
-
-
 (def workflow
   [[:in :extract-tweet]
    [:extract-tweet :filter-by-regex]
@@ -38,12 +36,6 @@
 ;    :word-count #{:out}
 ;    :hashtag-count #{:out}})
 
-(def client-workflow
-  [[:in-take :extract-tweet]
-   [:extract-tweet :filter-by-regex]
-   [:filter-by-regex :wrap-sente-user-info]
-   [:wrap-sente-user-info :out]])
-
 ;;;;;;;;
 ;;; Catalog
 ;;;;;;;;
@@ -53,22 +45,11 @@
     :onyx/ident :core.async/read-from-chan
     :onyx/type :input
     :onyx/medium :core.async
-    :onyx/max-peers 1
     :onyx/consumption :concurrent
     :onyx/batch-size batch-size 
     :onyx/batch-timeout batch-timeout
     :onyx/doc "Reads segments from a core.async channel"}
    
-   {:onyx/name :in-take
-    :onyx/ident :core.async/read-from-chan
-    :onyx/type :input
-    :onyx/max-peers 1
-    :onyx/consumption :concurrent
-    :onyx/medium :core.async
-    :onyx/batch-size batch-size 
-    :onyx/batch-timeout batch-timeout
-    :onyx/doc "Reads counted number of segments from a core.async channel"}
-
    {:onyx/name :extract-tweet
     :onyx/fn :onyx-timeline-example.onyx.functions/extract-tweet
     :onyx/type :function
@@ -138,14 +119,6 @@
     :onyx/batch-size batch-size
     :onyx/batch-timeout batch-timeout}
 
-   {:onyx/name :wrap-sente-user-info
-    :onyx/fn :onyx-timeline-example.onyx.functions/wrap-sente-user-info
-    :onyx/type :function
-    :onyx/consumption :concurrent
-    :onyx/batch-size batch-size
-    :sente/client :any
-    :onyx/batch-timeout batch-timeout}
-
    {:onyx/name :out
     :onyx/ident :core.async/write-to-chan
     :onyx/type :output
@@ -161,12 +134,7 @@
 
 (defmethod l-ext/inject-lifecycle-resources :in
   [_ {:keys [onyx.core/peer-opts]}]
-  ; Although we could just tap the input chan mult, we would have no way
-  ; to send a :done sentinel to the job without stopping any other jobs 
-  ; that depend on the timeline channel. Therefore we pipe the tapped
-  ; timeline in, and only send the :done to the in chan.
-  (let [timeline-tap (a/tap (:timeline/input-ch-mult peer-opts) (chan))]
-    {:core-async/in-chan (pipe timeline-tap (chan))}))
+  {:core-async/in-chan (:timeline/input-ch peer-opts)})
 
 (defmethod l-ext/inject-lifecycle-resources :out
   [_ {:keys [onyx.core/peer-opts]}]
@@ -193,18 +161,3 @@
   (let [local-state (atom {:tokens [] :counts {}})]
     {:onyx.core/params [local-state (:timeline.hashtags/trend-period task-map)]
      :timeline/hashtag-count-state local-state}))
-
-(defmethod l-ext/inject-lifecycle-resources :wrap-sente-user-info
-  [_ {:keys [onyx.core/task-map]}]
-  {:onyx.core/params [(:sente/uid task-map)]})
-
-(defmethod l-ext/inject-lifecycle-resources :in-take
-  [_ {:keys [onyx.core/peer-opts onyx.core/task-map]}]
-  ; to send a :done sentinel to the job without stopping any other jobs 
-  ; that depend on the timeline channel. Therefore we pipe the tapped
-  ; timeline in, and only send the :done to the in chan.
-  (let [in (-> peer-opts 
-               :scheduler/jobs 
-               deref
-               (get-in [(:sente/uid task-map) :input-ch]))]
-    {:core-async/in-chan in}))

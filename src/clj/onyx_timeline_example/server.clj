@@ -21,7 +21,6 @@
 
 (def input-ch (chan (sliding-buffer capacity)))
 (def output-ch (chan (sliding-buffer capacity)))
-(def onyx-command-ch (chan))
 
 (def log-config {:appenders {:standard-out {:enabled? false}
                              :spit {:enabled? false}
@@ -46,13 +45,8 @@
                          :onyx.peer/job-scheduler :onyx.job-scheduler/round-robin
                          :hornetq/mode :vm
                          :zookeeper/address "127.0.0.1:2185"
-                         :scheduler/max-jobs 5
-                         :scheduler/num-peers-filter 10
-                         :scheduler/jobs (atom {})
-                         :scheduler/command-ch onyx-command-ch
                          :user-filter/num-tweets 1000
                          :timeline/input-ch input-ch
-                         :timeline/input-ch-mult (mult input-ch)
                          :timeline/output-ch output-ch}
                   :num-peers 20}})
 
@@ -61,15 +55,13 @@
   will bring up the individual components in the correct order."
   (component/system-map
    :twitter (twitter/new-tweet-stream conf)
-   ;:onyx-connection (component/using (onyx/new-onyx-connection conf) [:twitter])
    ; FIXME: don't reuse peer map so blatantly for env
    :onyx-env (component/using (s/onyx-development-env (:env (:onyx conf))) [:twitter])
    :onyx-peers (component/using (onyx/new-onyx-peers (:peer (:onyx conf))
                                                      (:num-peers (:onyx conf))) [:onyx-env])
-   :onyx-scheduler (component/using (onyx/new-onyx-scheduler conf) [:onyx-env])
    :onyx-job (component/using (onyx/new-onyx-job (:peer (:onyx conf))) [:onyx-env])
    :web (web/new-web-state)
-   :comm (component/using (comm/new-sente-communicator) [:web :onyx-scheduler])
+   :comm (component/using (comm/new-sente-communicator) [:web])
    :http (component/using (http/new-http-server conf) [:comm])
    :switchboard (component/using (sw/new-switchboard conf) [:web])))
 
