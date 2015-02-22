@@ -11,7 +11,7 @@ e.g.
 {:user {:env {:twitter-consumer-secret "XXX"
               :twitter-consumer-key "XXX"
               :twitter-token "XXX"
-	      :twitter-secret "XXX"}
+              :twitter-secret "XXX"}
 ```
 
 Alternatively you can set environment variables in the form of `TWITTER_CONSUMER_SECRET`.
